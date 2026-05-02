@@ -1,5 +1,7 @@
 # Cognigy OData Suite
 
+**[github.com/danieltucker/CognigyODataSuite](https://github.com/danieltucker/CognigyODataSuite)**
+
 A local analytics tool for importing, exploring, and visualising data from Cognigy.AI OData feeds. Runs entirely on your machine — no cloud, no external services, no telemetry.
 
 ## What it does
@@ -8,7 +10,7 @@ Cognigy Insights has gaps in filtering, custom search, and data export. This too
 
 - **Import dashboard** — per-entity sync status, manual pull, and scheduled auto-sync
 - **Data Explorer** — searchable, filterable, sortable tables for all 10 OData entities with CSV and Excel export
-- **Analytics Dashboard** — session volume, top intents, channel distribution, execution time trends, intent score distribution, and escalation rate — all filterable by date range
+- **Analytics Dashboard** — session volume, top intents, channel distribution, execution time trends, intent score distribution, escalation rate, and goals — all filterable by date range, channel, and endpoint
 
 Each customer's data is fully isolated in its own `.duckdb` file. Nothing ever leaves your machine except outbound OData API calls to the configured Cognigy endpoint.
 
@@ -20,7 +22,7 @@ Each customer's data is fully isolated in its own `.duckdb` file. Nothing ever l
 ## Installation
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/danieltucker/CognigyODataSuite.git
 cd CognigyODataSuite
 npm install
 npm run dev
@@ -66,11 +68,13 @@ Scheduled auto-sync runs on the interval configured per customer (default: every
 
 ## Data Explorer
 
-Navigate to any entity from the overview page (table icon on the entity card). Features:
+Navigate to any entity via **Records** in the sidebar. Features:
 
 - Server-side pagination, sorting, and filtering (50 rows per page)
 - Text search across key columns (session ID, contact ID, input text, intent, etc.)
 - Date range filter on timestamp columns
+- Column filters for **Channel**, **Endpoint Name**, and **Snapshot Name** where available
+- Click any row to open a full record detail view showing every field
 - Column visibility toggle — show/hide any column
 - Export current filtered view to **CSV** or **Excel** (up to 50,000 rows)
 
@@ -78,14 +82,15 @@ Navigate to any entity from the overview page (table icon on the entity card). F
 
 Click **Dashboard** in the sidebar sub-nav for any customer. Shows:
 
-- KPI cards — total sessions, conversations, escalations (with rate), average intent score
+- KPI cards — total sessions, conversations, escalations (with rate), average intent score, total goal events
 - Session volume by day
 - Top 10 intents
 - Channel distribution
 - Average execution time trend
 - Intent score distribution (NLU confidence histogram)
+- Goals section — top goals by event count and goal events by day (shown when goal data exists)
 
-All charts re-query the local database when you change the date range.
+All charts re-query the local database when you change the date range, channel, or endpoint filter.
 
 ## Tech stack
 
@@ -93,7 +98,7 @@ All charts re-query the local database when you change the date range.
 |---|---|
 | Framework | Next.js 15 (App Router, TypeScript) |
 | Database | DuckDB via `@duckdb/node-api` (one file per customer) |
-| Charts | Tremor + Recharts |
+| Charts | Recharts |
 | UI | shadcn/ui + Tailwind CSS |
 | HTTP | ky (OData fetching) |
 | Scheduler | node-cron |
@@ -105,11 +110,11 @@ All charts re-query the local database when you change the date range.
 src/
   app/
     api/customers/          REST API for customer management + import triggers
-    customers/[slug]/       Per-customer pages (overview, dashboard, data explorer)
+    customers/[slug]/       Per-customer pages (dashboard, records, data explorer)
   components/
-    customers/              Entity cards, add-customer sheet
-    dashboard/              Tremor chart components
-    data/                   Data explorer table
+    customers/              Entity cards, add/edit customer sheets
+    dashboard/              Dashboard charts and KPI cards
+    data/                   Data explorer table + record detail sheet
     layout/                 Sidebar
   db/
     client.ts               DuckDB connection manager (per-customer, cached)

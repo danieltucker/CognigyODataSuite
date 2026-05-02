@@ -181,7 +181,14 @@ export function Sidebar() {
             <Plus className="h-4 w-4" />
             Add Customer
           </Button>
-          <p className="text-center text-[10px] text-muted-foreground/40 pb-1">v0.2.0</p>
+          <a
+            href="https://github.com/danieltucker/CognigyODataSuite"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-center text-[10px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors pb-1"
+          >
+            v0.2.0
+          </a>
         </div>
       </aside>
 
