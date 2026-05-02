@@ -14,8 +14,14 @@ export interface DashboardData {
     totalConversations: number
     totalEscalations: number
     avgIntentScore: number | null
+    totalGoalEvents: number
+  }
+  goalsSummary: {
+    topGoals: { name: string; count: number }[]
+    goalEventsByDay: { date: string; events: number }[]
   }
   availableChannels: string[]
+  availableEndpoints: string[]
 }
 
 export async function GET(
@@ -29,22 +35,32 @@ export async function GET(
   const from = url.searchParams.get('from') ?? ''
   const to = url.searchParams.get('to') ?? ''
   const channel = url.searchParams.get('channel') ?? ''
+  const endpoint = url.searchParams.get('endpoint') ?? ''
 
   const conn = await getDb(slug)
 
-  // Date range conditions
+  // Analytics + goal_events filter conditions
+  const analyticsConditions: string[] = []
+  const analyticsBinds: unknown[] = []
+  if (from) { analyticsConditions.push(`"timestamp" >= ?`); analyticsBinds.push(from) }
+  if (to) { analyticsConditions.push(`"timestamp" <= ?`); analyticsBinds.push(to + 'T23:59:59.999Z') }
+  if (channel) { analyticsConditions.push(`"channel" = ?`); analyticsBinds.push(channel) }
+  if (endpoint) { analyticsConditions.push(`"endpointName" = ?`); analyticsBinds.push(endpoint) }
+  const analyticsWhere = analyticsConditions.length > 0 ? `WHERE ${analyticsConditions.join(' AND ')}` : ''
+
+  // Date-only conditions (no channel/endpoint) for tables that don't have those fields
   const dateConditions: string[] = []
   const dateBinds: unknown[] = []
   if (from) { dateConditions.push(`"timestamp" >= ?`); dateBinds.push(from) }
   if (to) { dateConditions.push(`"timestamp" <= ?`); dateBinds.push(to + 'T23:59:59.999Z') }
-  if (channel) { dateConditions.push(`"channel" = ?`); dateBinds.push(channel) }
-  const analyticsWhere = dateConditions.length > 0 ? `WHERE ${dateConditions.join(' AND ')}` : ''
+  const dateWhere = dateConditions.length > 0 ? `WHERE ${dateConditions.join(' AND ')}` : ''
 
-  // Session date range
+  // Sessions filter (uses startedAt, endpointName)
   const sessionConditions: string[] = []
   const sessionBinds: unknown[] = []
   if (from) { sessionConditions.push(`"startedAt" >= ?`); sessionBinds.push(from) }
   if (to) { sessionConditions.push(`"startedAt" <= ?`); sessionBinds.push(to + 'T23:59:59.999Z') }
+  if (endpoint) { sessionConditions.push(`"endpointName" = ?`); sessionBinds.push(endpoint) }
   const sessionsWhere = sessionConditions.length > 0 ? `WHERE ${sessionConditions.join(' AND ')}` : ''
 
   const [
@@ -58,87 +74,103 @@ export async function GET(
     summaryEscalations,
     summarySessions,
     availableChannelRows,
+    availableEndpointRows,
+    goalEventsTotal,
+    topGoalsRows,
+    goalEventsByDayRows,
   ] = await Promise.all([
     dbQuery<{ date: string; sessions: number }>(
       conn,
       `SELECT strftime(timestamp, '%Y-%m-%d') as date, COUNT(*) as sessions
-       FROM analytics ${analyticsWhere}
-       GROUP BY 1 ORDER BY 1`,
-      dateBinds
+       FROM analytics ${analyticsWhere} GROUP BY 1 ORDER BY 1`,
+      analyticsBinds
     ),
     dbQuery<{ intent: string; count: number }>(
       conn,
-      `SELECT intent, COUNT(*) as count
-       FROM analytics ${analyticsWhere ? analyticsWhere + ' AND' : 'WHERE'} intent IS NOT NULL AND intent != ''
+      `SELECT intent, COUNT(*) as count FROM analytics
+       ${analyticsWhere ? analyticsWhere + ' AND' : 'WHERE'} intent IS NOT NULL AND intent != ''
        GROUP BY intent ORDER BY count DESC LIMIT 10`,
-      dateBinds
+      analyticsBinds
     ),
     dbQuery<{ channel: string; count: number }>(
       conn,
       `SELECT COALESCE(channel, 'unknown') as channel, COUNT(*) as count
-       FROM analytics ${analyticsWhere}
-       GROUP BY channel ORDER BY count DESC`,
-      dateBinds
+       FROM analytics ${analyticsWhere} GROUP BY channel ORDER BY count DESC`,
+      analyticsBinds
     ),
     dbQuery<{ date: string; avgMs: number }>(
       conn,
-      `SELECT strftime(timestamp, '%Y-%m-%d') as date,
-              ROUND(AVG(executionTime), 0) as avgMs
+      `SELECT strftime(timestamp, '%Y-%m-%d') as date, ROUND(AVG(executionTime), 0) as avgMs
        FROM analytics ${analyticsWhere ? analyticsWhere + ' AND' : 'WHERE'} executionTime IS NOT NULL
        GROUP BY 1 ORDER BY 1`,
-      dateBinds
+      analyticsBinds
     ),
     dbQuery<{ bucket: string; count: number }>(
       conn,
-      `SELECT
-         CASE
-           WHEN intentScore < 0.1 THEN '0.0–0.1'
-           WHEN intentScore < 0.2 THEN '0.1–0.2'
-           WHEN intentScore < 0.3 THEN '0.2–0.3'
-           WHEN intentScore < 0.4 THEN '0.3–0.4'
-           WHEN intentScore < 0.5 THEN '0.4–0.5'
-           WHEN intentScore < 0.6 THEN '0.5–0.6'
-           WHEN intentScore < 0.7 THEN '0.6–0.7'
-           WHEN intentScore < 0.8 THEN '0.7–0.8'
-           WHEN intentScore < 0.9 THEN '0.8–0.9'
-           ELSE '0.9–1.0'
-         END as bucket,
-         COUNT(*) as count
+      `SELECT CASE
+         WHEN intentScore < 0.1 THEN '0.0–0.1' WHEN intentScore < 0.2 THEN '0.1–0.2'
+         WHEN intentScore < 0.3 THEN '0.2–0.3' WHEN intentScore < 0.4 THEN '0.3–0.4'
+         WHEN intentScore < 0.5 THEN '0.4–0.5' WHEN intentScore < 0.6 THEN '0.5–0.6'
+         WHEN intentScore < 0.7 THEN '0.6–0.7' WHEN intentScore < 0.8 THEN '0.7–0.8'
+         WHEN intentScore < 0.9 THEN '0.8–0.9' ELSE '0.9–1.0'
+       END as bucket, COUNT(*) as count
        FROM analytics ${analyticsWhere ? analyticsWhere + ' AND' : 'WHERE'} intentScore IS NOT NULL
        GROUP BY bucket ORDER BY bucket`,
-      dateBinds
+      analyticsBinds
     ),
     dbQuery<{ total: number; avgScore: number | null }>(
       conn,
-      `SELECT COUNT(*) as total, ROUND(AVG(intentScore), 3) as avgScore
-       FROM analytics ${analyticsWhere}`,
+      `SELECT COUNT(*) as total, ROUND(AVG(intentScore), 3) as avgScore FROM analytics ${analyticsWhere}`,
+      analyticsBinds
+    ),
+    dbQuery<{ total: number }>(
+      conn,
+      `SELECT COUNT(*) as total FROM conversations ${dateWhere}`,
       dateBinds
     ),
     dbQuery<{ total: number }>(
       conn,
-      `SELECT COUNT(*) as total FROM conversations ${
-        dateConditions.length > 0 ? `WHERE ${dateConditions.filter(c => !c.includes('channel')).join(' AND ')}` : ''
-      }`,
-      dateBinds.filter((_, i) => !dateConditions[i]?.includes('channel'))
-    ),
-    dbQuery<{ total: number }>(
-      conn,
-      `SELECT COUNT(*) as total FROM live_agent_escalations ${
-        dateConditions.length > 0 ? `WHERE ${dateConditions.filter(c => !c.includes('channel')).join(' AND ')}` : ''
-      }`,
-      dateBinds.filter((_, i) => !dateConditions[i]?.includes('channel'))
+      `SELECT COUNT(*) as total FROM live_agent_escalations ${dateWhere}`,
+      dateBinds
     ),
     dbQuery<{ total: number; escalated: number }>(
       conn,
-      `SELECT COUNT(*) as total,
-              SUM(CASE WHEN handoverEscalations > 0 THEN 1 ELSE 0 END) as escalated
+      `SELECT COUNT(*) as total, SUM(CASE WHEN handoverEscalations > 0 THEN 1 ELSE 0 END) as escalated
        FROM sessions ${sessionsWhere}`,
       sessionBinds
     ),
-    // Always unfiltered — used to populate the channel dropdown
     dbQuery<{ channel: string }>(
       conn,
       `SELECT DISTINCT COALESCE(channel, 'unknown') as channel FROM analytics WHERE channel IS NOT NULL ORDER BY 1`
+    ),
+    dbQuery<{ endpoint: string }>(
+      conn,
+      `SELECT DISTINCT endpointName as endpoint FROM analytics WHERE endpointName IS NOT NULL AND endpointName != '' ORDER BY 1`
+    ),
+    // Goal events total
+    dbQuery<{ total: number }>(
+      conn,
+      `SELECT COUNT(*) as total FROM goal_events ${dateWhere}`,
+      dateBinds
+    ),
+    // Top goals by event count (join with goals for human-readable name)
+    dbQuery<{ name: string; count: number }>(
+      conn,
+      `SELECT COALESCE(g.name, sub.goalId) as name, sub.cnt as count
+       FROM (
+         SELECT goalId, COUNT(*) as cnt FROM goal_events ${dateWhere}
+         GROUP BY goalId ORDER BY cnt DESC LIMIT 10
+       ) sub
+       LEFT JOIN goals g ON sub.goalId = g.goalId
+       ORDER BY sub.cnt DESC`,
+      dateBinds
+    ),
+    // Goal events by day
+    dbQuery<{ date: string; events: number }>(
+      conn,
+      `SELECT strftime(timestamp, '%Y-%m-%d') as date, COUNT(*) as events
+       FROM goal_events ${dateWhere} GROUP BY 1 ORDER BY 1`,
+      dateBinds
     ),
   ])
 
@@ -157,8 +189,14 @@ export async function GET(
       totalConversations: Number(summaryConversations[0]?.total ?? 0),
       totalEscalations: Number(summaryEscalations[0]?.total ?? 0),
       avgIntentScore: summaryAnalytics[0]?.avgScore ?? null,
+      totalGoalEvents: Number(goalEventsTotal[0]?.total ?? 0),
+    },
+    goalsSummary: {
+      topGoals: topGoalsRows.map((r) => ({ name: r.name, count: Number(r.count) })),
+      goalEventsByDay: goalEventsByDayRows.map((r) => ({ date: r.date, events: Number(r.events) })),
     },
     availableChannels: availableChannelRows.map((r) => r.channel),
+    availableEndpoints: availableEndpointRows.map((r) => r.endpoint),
   }
 
   return NextResponse.json(result)

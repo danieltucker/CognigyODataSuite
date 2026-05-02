@@ -9,7 +9,7 @@ out/
 build/
 
 # Local data — never commit customer data or credentials
-data/
+/data/
 
 # Environment
 .env

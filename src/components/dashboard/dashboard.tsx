@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   RefreshCw, Users, MessageSquare, PhoneCall, Brain,
-  TrendingUp, BarChart3, Cpu, Activity,
+  TrendingUp, BarChart3, Cpu, Activity, Target,
 } from 'lucide-react'
 import type { DashboardData } from '@/app/api/customers/[slug]/dashboard/route'
 
@@ -98,7 +98,10 @@ export function Dashboard({ slug, displayName }: Props) {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [channel, setChannel] = useState('all')
+  const [endpoint, setEndpoint] = useState('all')
   const colors = useChartColors()
+
+  const today = new Date().toISOString().split('T')[0]
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -108,6 +111,7 @@ export function Dashboard({ slug, displayName }: Props) {
         ...(from && { from }),
         ...(to && { to }),
         ...(channel !== 'all' && { channel }),
+        ...(endpoint !== 'all' && { endpoint }),
       })
       const res = await fetch(`/api/customers/${slug}/dashboard?${p}`)
       if (!res.ok) throw new Error(`Failed to load dashboard: ${res.status}`)
@@ -117,7 +121,7 @@ export function Dashboard({ slug, displayName }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [slug, from, to, channel])
+  }, [slug, from, to, channel, endpoint])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -148,11 +152,27 @@ export function Dashboard({ slug, displayName }: Props) {
             </Select>
           )}
 
+          {/* Endpoint filter */}
+          {data?.availableEndpoints && data.availableEndpoints.length > 1 && (
+            <Select value={endpoint} onValueChange={setEndpoint}>
+              <SelectTrigger className="h-8 w-40 text-xs">
+                <SelectValue placeholder="All endpoints" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All endpoints</SelectItem>
+                {data.availableEndpoints.map((ep) => (
+                  <SelectItem key={ep} value={ep}>{ep}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           {/* Date range */}
           <Input
             type="date"
             className="h-8 w-36 text-xs font-mono"
             value={from}
+            max={today}
             onChange={(e) => setFrom(e.target.value)}
           />
           <span className="text-xs text-muted-foreground">–</span>
@@ -160,6 +180,7 @@ export function Dashboard({ slug, displayName }: Props) {
             type="date"
             className="h-8 w-36 text-xs font-mono"
             value={to}
+            max={today}
             onChange={(e) => setTo(e.target.value)}
           />
           <Button variant="outline" size="sm" className="h-8 px-2" onClick={fetchData} disabled={loading}>
@@ -176,7 +197,7 @@ export function Dashboard({ slug, displayName }: Props) {
 
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
         {/* KPI row */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
           <KPICard
             title="Sessions"
             value={data?.summary.totalSessions.toLocaleString() ?? null}
@@ -205,6 +226,12 @@ export function Dashboard({ slug, displayName }: Props) {
             }
             color="#6ae1a1"
             icon={<Brain className="h-4 w-4" />}
+          />
+          <KPICard
+            title="Goal Events"
+            value={data?.summary.totalGoalEvents.toLocaleString() ?? null}
+            color="#f5c842"
+            icon={<Target className="h-4 w-4" />}
           />
         </div>
 
@@ -404,6 +431,94 @@ export function Dashboard({ slug, displayName }: Props) {
             </CardContent>
           </Card>
         </div>
+
+        {/* Goals section — only shown when there are goal events */}
+        {(data?.summary.totalGoalEvents ?? 0) > 0 && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-[#f5c842]" />
+              <h2 className="text-sm font-semibold">Goals</h2>
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              {/* Top Goals */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Target className="h-4 w-4 text-[#f5c842]" />
+                    Top Goals
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {loading ? (
+                    <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+                      <RefreshCw className="h-4 w-4 animate-spin mr-2" /> Loading…
+                    </div>
+                  ) : !data?.goalsSummary.topGoals.length ? (
+                    <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">No data</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={192}>
+                      <BarChart data={data.goalsSummary.topGoals} layout="vertical" barSize={10}>
+                        <defs>
+                          <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#f5c842" stopOpacity={0.5} />
+                            <stop offset="100%" stopColor="#f5c842" stopOpacity={0.9} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid horizontal={false} stroke={colors.grid} strokeDasharray="3 3" />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} />
+                        <YAxis
+                          type="category"
+                          dataKey="name"
+                          tick={{ fontSize: 10, fill: colors.axis }}
+                          tickLine={false}
+                          axisLine={false}
+                          width={100}
+                          tickFormatter={(v: string) => v.length > 16 ? v.slice(0, 16) + '…' : v}
+                        />
+                        <Tooltip content={<ChartTooltip />} cursor={{ fill: colors.grid }} />
+                        <Bar dataKey="count" fill="url(#goldGrad)" radius={[0, 3, 3, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Goal Events by Day */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-[#f5c842]" />
+                    Goal Events by Day
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {loading ? (
+                    <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+                      <RefreshCw className="h-4 w-4 animate-spin mr-2" /> Loading…
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={192}>
+                      <AreaChart data={data?.goalsSummary.goalEventsByDay ?? []}>
+                        <defs>
+                          <linearGradient id="goldAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#f5c842" stopOpacity={0.3} />
+                            <stop offset="100%" stopColor="#f5c842" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid vertical={false} stroke={colors.grid} strokeDasharray="3 3" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} width={40} />
+                        <Tooltip content={<ChartTooltip />} />
+                        <Area type="monotone" dataKey="events" stroke="#f5c842" strokeWidth={2} fill="url(#goldAreaGrad)" dot={false} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
