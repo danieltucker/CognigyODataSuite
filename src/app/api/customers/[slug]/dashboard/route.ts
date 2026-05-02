@@ -15,6 +15,7 @@ export interface DashboardData {
     totalEscalations: number
     avgIntentScore: number | null
   }
+  availableChannels: string[]
 }
 
 export async function GET(
@@ -27,17 +28,19 @@ export async function GET(
   const url = new URL(req.url)
   const from = url.searchParams.get('from') ?? ''
   const to = url.searchParams.get('to') ?? ''
+  const channel = url.searchParams.get('channel') ?? ''
 
   const conn = await getDb(slug)
 
-  // Date range clause (reused across queries)
+  // Date range conditions
   const dateConditions: string[] = []
   const dateBinds: unknown[] = []
   if (from) { dateConditions.push(`"timestamp" >= ?`); dateBinds.push(from) }
   if (to) { dateConditions.push(`"timestamp" <= ?`); dateBinds.push(to + 'T23:59:59.999Z') }
+  if (channel) { dateConditions.push(`"channel" = ?`); dateBinds.push(channel) }
   const analyticsWhere = dateConditions.length > 0 ? `WHERE ${dateConditions.join(' AND ')}` : ''
 
-  // Session date range uses startedAt
+  // Session date range
   const sessionConditions: string[] = []
   const sessionBinds: unknown[] = []
   if (from) { sessionConditions.push(`"startedAt" >= ?`); sessionBinds.push(from) }
@@ -54,8 +57,8 @@ export async function GET(
     summaryConversations,
     summaryEscalations,
     summarySessions,
+    availableChannelRows,
   ] = await Promise.all([
-    // Session volume by day
     dbQuery<{ date: string; sessions: number }>(
       conn,
       `SELECT strftime(timestamp, '%Y-%m-%d') as date, COUNT(*) as sessions
@@ -63,8 +66,6 @@ export async function GET(
        GROUP BY 1 ORDER BY 1`,
       dateBinds
     ),
-
-    // Top 10 intents (exclude null/empty)
     dbQuery<{ intent: string; count: number }>(
       conn,
       `SELECT intent, COUNT(*) as count
@@ -72,8 +73,6 @@ export async function GET(
        GROUP BY intent ORDER BY count DESC LIMIT 10`,
       dateBinds
     ),
-
-    // Channel distribution
     dbQuery<{ channel: string; count: number }>(
       conn,
       `SELECT COALESCE(channel, 'unknown') as channel, COUNT(*) as count
@@ -81,8 +80,6 @@ export async function GET(
        GROUP BY channel ORDER BY count DESC`,
       dateBinds
     ),
-
-    // Avg execution time by day
     dbQuery<{ date: string; avgMs: number }>(
       conn,
       `SELECT strftime(timestamp, '%Y-%m-%d') as date,
@@ -91,8 +88,6 @@ export async function GET(
        GROUP BY 1 ORDER BY 1`,
       dateBinds
     ),
-
-    // Intent score distribution (buckets 0–1 in 0.1 steps)
     dbQuery<{ bucket: string; count: number }>(
       conn,
       `SELECT
@@ -113,40 +108,37 @@ export async function GET(
        GROUP BY bucket ORDER BY bucket`,
       dateBinds
     ),
-
-    // Summary: analytics count + avg intent score
     dbQuery<{ total: number; avgScore: number | null }>(
       conn,
       `SELECT COUNT(*) as total, ROUND(AVG(intentScore), 3) as avgScore
        FROM analytics ${analyticsWhere}`,
       dateBinds
     ),
-
-    // Summary: conversations
     dbQuery<{ total: number }>(
       conn,
       `SELECT COUNT(*) as total FROM conversations ${
-        dateConditions.length > 0 ? `WHERE ${dateConditions.join(' AND ')}` : ''
+        dateConditions.length > 0 ? `WHERE ${dateConditions.filter(c => !c.includes('channel')).join(' AND ')}` : ''
       }`,
-      dateBinds
+      dateBinds.filter((_, i) => !dateConditions[i]?.includes('channel'))
     ),
-
-    // Summary: escalations
     dbQuery<{ total: number }>(
       conn,
       `SELECT COUNT(*) as total FROM live_agent_escalations ${
-        dateConditions.length > 0 ? `WHERE ${dateConditions.join(' AND ')}` : ''
+        dateConditions.length > 0 ? `WHERE ${dateConditions.filter(c => !c.includes('channel')).join(' AND ')}` : ''
       }`,
-      dateBinds
+      dateBinds.filter((_, i) => !dateConditions[i]?.includes('channel'))
     ),
-
-    // Summary: sessions
     dbQuery<{ total: number; escalated: number }>(
       conn,
       `SELECT COUNT(*) as total,
               SUM(CASE WHEN handoverEscalations > 0 THEN 1 ELSE 0 END) as escalated
        FROM sessions ${sessionsWhere}`,
       sessionBinds
+    ),
+    // Always unfiltered — used to populate the channel dropdown
+    dbQuery<{ channel: string }>(
+      conn,
+      `SELECT DISTINCT COALESCE(channel, 'unknown') as channel FROM analytics WHERE channel IS NOT NULL ORDER BY 1`
     ),
   ])
 
@@ -166,6 +158,7 @@ export async function GET(
       totalEscalations: Number(summaryEscalations[0]?.total ?? 0),
       avgIntentScore: summaryAnalytics[0]?.avgScore ?? null,
     },
+    availableChannels: availableChannelRows.map((r) => r.channel),
   }
 
   return NextResponse.json(result)

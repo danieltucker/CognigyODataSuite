@@ -3,16 +3,54 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { AddCustomerSheet } from '@/components/customers/add-customer-sheet'
+import { EditCustomerSheet } from '@/components/customers/edit-customer-sheet'
 import { customerColor, formatRelativeTime } from '@/lib/utils'
-import { Plus, Database, LayoutDashboard, Table2 } from 'lucide-react'
+import { Plus, Database, LayoutDashboard, Table2, Settings, Sun, Moon, Monitor } from 'lucide-react'
 import type { CustomerRecord } from '@/lib/customers'
+
+type ThemeOption = 'light' | 'dark' | 'system'
+
+function ThemeToggle() {
+  const { theme, setTheme, resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return null
+
+  const options: { value: ThemeOption; icon: React.ReactNode; label: string }[] = [
+    { value: 'light', icon: <Sun className="h-3.5 w-3.5" />, label: 'Light' },
+    { value: 'dark', icon: <Moon className="h-3.5 w-3.5" />, label: 'Dark' },
+    { value: 'system', icon: <Monitor className="h-3.5 w-3.5" />, label: 'Auto' },
+  ]
+
+  return (
+    <div className="flex items-center gap-0.5 rounded-md bg-muted p-0.5">
+      {options.map(({ value, icon, label }) => (
+        <button
+          key={value}
+          onClick={() => setTheme(value)}
+          title={label}
+          className={`flex flex-1 items-center justify-center gap-1 rounded px-2 py-1.5 text-[11px] transition-colors ${
+            (theme === value || (value === 'system' && !['light', 'dark'].includes(theme ?? '')))
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          {icon}
+          <span className="hidden sm:inline">{label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export function Sidebar() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([])
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [editCustomer, setEditCustomer] = useState<CustomerRecord | null>(null)
   const pathname = usePathname()
   const router = useRouter()
 
@@ -25,21 +63,31 @@ export function Sidebar() {
 
   async function onCreated() {
     await loadCustomers()
-    // Navigate to the newest customer
     const res = await fetch('/api/customers')
     if (res.ok) {
       const list: CustomerRecord[] = await res.json()
-      if (list.length > 0) router.push(`/customers/${list[list.length - 1].slug}`)
+      if (list.length > 0) router.push(`/customers/${list[list.length - 1].slug}/dashboard`)
     }
+  }
+
+  async function onUpdated() {
+    await loadCustomers()
+  }
+
+  async function onDeleted() {
+    await loadCustomers()
+    router.push('/')
   }
 
   return (
     <>
       <aside className="flex h-screen w-64 flex-col border-r bg-card">
         {/* Header */}
-        <div className="flex items-center gap-2 px-4 py-4">
-          <Database className="h-5 w-5 text-primary" />
-          <span className="font-semibold tracking-tight">OData Suite</span>
+        <div className="flex items-center gap-2.5 px-4 py-4">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15">
+            <Database className="h-4 w-4 text-primary" />
+          </div>
+          <span className="font-semibold tracking-tight text-sm">OData Suite</span>
         </div>
 
         <Separator />
@@ -55,44 +103,59 @@ export function Sidebar() {
             const isActive = pathname.startsWith(`/customers/${c.slug}`)
             const color = customerColor(c.slug, c.color)
             const isDashboard = pathname === `/customers/${c.slug}/dashboard`
-            const isOverview = isActive && !isDashboard
+            const isEntities =
+              pathname.startsWith(`/customers/${c.slug}/entities`) ||
+              pathname.startsWith(`/customers/${c.slug}/data`)
+            const lastSync = c.lastSyncedAt
+              ? `Synced ${formatRelativeTime(c.lastSyncedAt).toLowerCase()}`
+              : 'Never synced'
+
             return (
               <div key={c.slug}>
                 {/* Customer row */}
-                <Link
-                  href={`/customers/${c.slug}`}
-                  className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors hover:bg-accent hover:text-accent-foreground ${
-                    isOverview ? 'bg-accent text-accent-foreground font-medium' : 'text-foreground/80'
-                  }`}
-                >
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: color }}
-                  />
-                  <div className="flex min-w-0 flex-col">
-                    <span className="truncate leading-tight">{c.displayName}</span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {c.lastSyncedAt ? formatRelativeTime(c.lastSyncedAt) : 'Never synced'}
-                    </span>
-                  </div>
-                </Link>
+                <div className={`group flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors hover:bg-accent/60 ${
+                  isActive ? 'bg-accent/40' : ''
+                }`}>
+                  <Link
+                    href={`/customers/${c.slug}/dashboard`}
+                    className="flex flex-1 min-w-0 items-center gap-2.5"
+                  >
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: color }}
+                    />
+                    <div className="flex min-w-0 flex-col">
+                      <span className={`truncate leading-tight text-sm ${isActive ? 'font-semibold text-foreground' : 'text-foreground/80'}`}>
+                        {c.displayName}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">{lastSync}</span>
+                    </div>
+                  </Link>
+                  <button
+                    onClick={() => setEditCustomer(c)}
+                    className="shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity p-0.5 rounded hover:bg-muted"
+                    title="Edit customer"
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                  </button>
+                </div>
 
                 {/* Sub-nav when customer is active */}
                 {isActive && (
                   <div className="ml-5 mt-0.5 flex flex-col gap-0.5">
                     <Link
                       href={`/customers/${c.slug}/dashboard`}
-                      className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground ${
-                        isDashboard ? 'bg-accent/60 text-accent-foreground font-medium' : 'text-muted-foreground'
+                      className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-accent/60 hover:text-accent-foreground ${
+                        isDashboard ? 'bg-accent/50 text-accent-foreground font-medium' : 'text-muted-foreground'
                       }`}
                     >
                       <LayoutDashboard className="h-3 w-3" />
                       Dashboard
                     </Link>
                     <Link
-                      href={`/customers/${c.slug}`}
-                      className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground ${
-                        isOverview ? 'bg-accent/60 text-accent-foreground font-medium' : 'text-muted-foreground'
+                      href={`/customers/${c.slug}/entities`}
+                      className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-accent/60 hover:text-accent-foreground ${
+                        isEntities ? 'bg-accent/50 text-accent-foreground font-medium' : 'text-muted-foreground'
                       }`}
                     >
                       <Table2 className="h-3 w-3" />
@@ -107,12 +170,13 @@ export function Sidebar() {
 
         <Separator />
 
-        {/* Add customer */}
-        <div className="p-2">
+        {/* Footer */}
+        <div className="flex flex-col gap-2 p-2">
+          <ThemeToggle />
           <Button
             variant="ghost"
-            className="w-full justify-start gap-2 text-sm text-muted-foreground"
-            onClick={() => setSheetOpen(true)}
+            className="w-full justify-start gap-2 text-sm text-muted-foreground hover:text-foreground"
+            onClick={() => setAddOpen(true)}
           >
             <Plus className="h-4 w-4" />
             Add Customer
@@ -120,7 +184,14 @@ export function Sidebar() {
         </div>
       </aside>
 
-      <AddCustomerSheet open={sheetOpen} onOpenChange={setSheetOpen} onCreated={onCreated} />
+      <AddCustomerSheet open={addOpen} onOpenChange={setAddOpen} onCreated={onCreated} />
+      <EditCustomerSheet
+        customer={editCustomer}
+        open={!!editCustomer}
+        onOpenChange={(v) => { if (!v) setEditCustomer(null) }}
+        onUpdated={onUpdated}
+        onDeleted={onDeleted}
+      />
     </>
   )
 }

@@ -1,34 +1,66 @@
 import path from 'path'
 import fs from 'fs'
 
-// Using @duckdb/node-api which supports Node.js 22+ with pre-built binaries
 import { DuckDBInstance } from '@duckdb/node-api'
 import type { DuckDBConnection } from '@duckdb/node-api'
 
+// ---------------------------------------------------------------------------
+// Connection cache — stores the in-flight Promise so concurrent requests that
+// all find the cache empty don't each race to open the same .duckdb file.
+// Using globalThis survives Next.js HMR module reloads.
+// ---------------------------------------------------------------------------
+
 declare global {
   // eslint-disable-next-line no-var
-  var __dbCache: Map<string, DuckDBConnection> | undefined
+  var __dbCache: Map<string, Promise<DuckDBConnection>> | undefined
 }
 
-const cache: Map<string, DuckDBConnection> = globalThis.__dbCache ?? new Map()
+const cache: Map<string, Promise<DuckDBConnection>> =
+  globalThis.__dbCache ?? new Map()
 globalThis.__dbCache = cache
 
 export function getDbPath(slug: string): string {
   return path.join(process.cwd(), 'data', 'customers', slug, 'data.duckdb')
 }
 
-export async function getDb(slug: string): Promise<DuckDBConnection> {
-  if (cache.has(slug)) return cache.get(slug)!
-
+async function openConnection(slug: string): Promise<DuckDBConnection> {
   const dbPath = getDbPath(slug)
   const dir = path.dirname(dbPath)
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 
-  const instance = await DuckDBInstance.create(dbPath)
-  const conn = await instance.connect()
-  await runMigrations(conn)
-  cache.set(slug, conn)
-  return conn
+  // Retry up to 5× with back-off in case another process (e.g. a stale dev
+  // server that didn't exit cleanly) is still holding the DuckDB write lock.
+  let lastErr: unknown
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const instance = await DuckDBInstance.create(dbPath)
+      const conn = await instance.connect()
+      await runMigrations(conn)
+      return conn
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('Could not set lock') && attempt < 4) {
+        lastErr = err
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)))
+        continue
+      }
+      throw err
+    }
+  }
+  throw lastErr
+}
+
+export async function getDb(slug: string): Promise<DuckDBConnection> {
+  if (!cache.has(slug)) {
+    // Store the Promise immediately so any concurrent call awaits the same one
+    // instead of launching a second DuckDBInstance.create() for the same file.
+    const p = openConnection(slug).catch((err) => {
+      cache.delete(slug) // evict so the next call can retry
+      throw err
+    })
+    cache.set(slug, p)
+  }
+  return cache.get(slug)!
 }
 
 export function closeDb(slug: string): void {
@@ -40,7 +72,6 @@ export async function runMigrations(conn: DuckDBConnection): Promise<void> {
     path.join(process.cwd(), 'src', 'db', 'migrations', '001_initial.sql'),
     'utf-8'
   )
-  // Split into individual statements; conn.run() handles one statement at a time
   const statements = sql.split(';').map((s) => s.trim()).filter(Boolean)
   for (const stmt of statements) {
     await conn.run(stmt)
@@ -48,7 +79,7 @@ export async function runMigrations(conn: DuckDBConnection): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Value normalisation — converts DuckDB-specific types to JS primitives
+// Value normalisation
 // ---------------------------------------------------------------------------
 
 function normalizeValue(val: unknown): unknown {
@@ -75,7 +106,7 @@ function normalizeRow<T>(row: Record<string, unknown>): T {
 }
 
 // ---------------------------------------------------------------------------
-// Parameter binding — maps JS primitives to DuckDB bind methods
+// Parameter binding
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -87,7 +118,6 @@ function bindParam(stmt: any, idx: number, val: unknown): void {
   } else if (typeof val === 'number') {
     Number.isInteger(val) ? stmt.bindInteger(idx, val) : stmt.bindDouble(idx, val)
   } else {
-    // Strings, ISO timestamps, serialized JSON — DuckDB auto-casts to target column type
     stmt.bindVarchar(idx, String(val))
   }
 }
@@ -132,6 +162,5 @@ export async function dbExec(conn: DuckDBConnection, sql: string): Promise<void>
   for (const s of statements) await conn.run(s)
 }
 
-// Exposed for the importer's batch upsert — reuses a prepared statement across many rows
 export { bindParam }
 export type { DuckDBConnection }

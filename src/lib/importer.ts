@@ -159,10 +159,12 @@ async function* paginateIncremental(
     try {
       data = await fetchPage(odataUrl, apiKey, collection, params)
     } catch (err) {
-      // Cognigy can return 500 when the cursor is at/past the latest record rather
-      // than returning an empty page. Treat this as end-of-data if we already have results.
-      if (pagesYielded > 0) {
-        console.warn(`[importer] ${collection}: got error at cursor ${cursor} after ${pagesYielded} pages — treating as end of data`)
+      // Cognigy returns HTTP 500 when the cursor filter reaches/passes the latest
+      // record rather than returning an empty page. Treat this as end-of-data
+      // whenever we have an active cursor — regardless of whether we've already
+      // yielded pages. Without a cursor (first-ever sync) a 500 is a real failure.
+      if (cursor !== null) {
+        console.warn(`[importer] ${collection}: 500 at cursor ${cursor} (${pagesYielded} pages) — treating as end of data`)
         break
       }
       throw err

@@ -5,7 +5,10 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge, type BadgeProps } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Table2 } from 'lucide-react'
+import {
+  RefreshCw, BarChart3, MessageSquare, GitBranch, Zap,
+  Users, PhoneCall, Target, List, TrendingUp, Calendar,
+} from 'lucide-react'
 import { formatRelativeTime, formatCount } from '@/lib/utils'
 import type { EntityName } from '@/db/schema'
 
@@ -20,6 +23,32 @@ const ENTITY_LABELS: Record<EntityName, string> = {
   goal_steps: 'Goal Steps',
   goal_step_metrics: 'Goal Metrics',
   goal_events: 'Goal Events',
+}
+
+const ENTITY_ICONS: Record<EntityName, React.ReactNode> = {
+  analytics: <BarChart3 className="h-4 w-4" />,
+  conversations: <MessageSquare className="h-4 w-4" />,
+  steps: <GitBranch className="h-4 w-4" />,
+  executed_steps: <Zap className="h-4 w-4" />,
+  sessions: <Users className="h-4 w-4" />,
+  live_agent_escalations: <PhoneCall className="h-4 w-4" />,
+  goals: <Target className="h-4 w-4" />,
+  goal_steps: <List className="h-4 w-4" />,
+  goal_step_metrics: <TrendingUp className="h-4 w-4" />,
+  goal_events: <Calendar className="h-4 w-4" />,
+}
+
+const ENTITY_COLORS: Record<EntityName, string> = {
+  analytics: '#9341fb',
+  conversations: '#3b9ef6',
+  steps: '#6ae1a1',
+  executed_steps: '#f5c842',
+  sessions: '#ec4899',
+  live_agent_escalations: '#e6483d',
+  goals: '#14b8a6',
+  goal_steps: '#f97316',
+  goal_step_metrics: '#84cc16',
+  goal_events: '#a78bfa',
 }
 
 interface EntityStatus {
@@ -50,7 +79,9 @@ function statusBadge(jobStatus: string | null, updatedAt: string | null): {
 export function EntityCard({ status, slug, onSyncComplete }: Props) {
   const [syncing, setSyncing] = useState(false)
 
-  async function handlePull() {
+  async function handlePull(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
     setSyncing(true)
     try {
       await fetch(`/api/customers/${slug}/import`, {
@@ -58,7 +89,6 @@ export function EntityCard({ status, slug, onSyncComplete }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entity: status.entity_name }),
       })
-      // Poll until the job is no longer running
       await pollUntilDone(slug, status.entity_name)
       onSyncComplete()
     } finally {
@@ -67,45 +97,58 @@ export function EntityCard({ status, slug, onSyncComplete }: Props) {
   }
 
   const badge = statusBadge(syncing ? 'running' : status.lastJobStatus, status.updated_at)
+  const color = ENTITY_COLORS[status.entity_name]
+  const updatedText = status.updated_at
+    ? `Updated ${formatRelativeTime(status.updated_at).toLowerCase()}`
+    : 'Never synced'
 
   return (
-    <Card className="flex flex-col">
-      <CardContent className="flex flex-col gap-3 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium leading-tight">{ENTITY_LABELS[status.entity_name]}</p>
-          <Badge variant={badge.variant} className="shrink-0 text-[11px]">{badge.label}</Badge>
+    <Card className="relative overflow-hidden transition-all duration-200 hover:shadow-md hover:border-primary/30 group cursor-pointer">
+      {/* Stretched link covers the whole card */}
+      <Link
+        href={`/customers/${slug}/data/${status.entity_name}`}
+        className="absolute inset-0 z-[1]"
+        aria-label={`Explore ${ENTITY_LABELS[status.entity_name]} data`}
+      />
+
+      {/* Top accent strip */}
+      <div className="h-0.5 w-full" style={{ backgroundColor: color }} />
+
+      <CardContent className="p-4">
+        {/* Header row */}
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <span style={{ color }} className="opacity-80">
+              {ENTITY_ICONS[status.entity_name]}
+            </span>
+            <p className="text-sm font-semibold leading-tight">{ENTITY_LABELS[status.entity_name]}</p>
+          </div>
+          <Badge variant={badge.variant} className="shrink-0 text-[11px] relative z-[2]">
+            {badge.label}
+          </Badge>
         </div>
 
-        <div className="flex items-baseline gap-1">
-          <span className="text-2xl font-bold tabular-nums">
+        {/* Record count */}
+        <div className="flex items-baseline gap-1 mb-3">
+          <span className="text-2xl font-bold tabular-nums" style={{ color }}>
             {formatCount(status.recordCount)}
           </span>
           <span className="text-xs text-muted-foreground">records</span>
         </div>
 
+        {/* Footer row */}
         <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            {status.updated_at ? formatRelativeTime(status.updated_at) : 'Never'}
-          </p>
-          <div className="flex items-center gap-1">
-            {status.recordCount > 0 && (
-              <Link href={`/customers/${slug}/data/${status.entity_name}`}>
-                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" tabIndex={-1}>
-                  <Table2 className="h-3 w-3" />
-                </Button>
-              </Link>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-xs"
-              onClick={handlePull}
-              disabled={syncing}
-            >
-              <RefreshCw className={`h-3 w-3 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Syncing' : 'Pull'}
-            </Button>
-          </div>
+          <p className="text-[11px] text-muted-foreground">{updatedText}</p>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="relative z-[2] h-7 px-2 text-xs opacity-60 group-hover:opacity-100 transition-opacity"
+            onClick={handlePull}
+            disabled={syncing}
+          >
+            <RefreshCw className={`h-3 w-3 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing' : 'Pull'}
+          </Button>
         </div>
       </CardContent>
     </Card>
