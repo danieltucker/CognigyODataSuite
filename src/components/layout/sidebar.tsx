@@ -12,7 +12,7 @@ import { EditCustomerSheet } from '@/components/customers/edit-customer-sheet'
 import { customerColor, formatRelativeTime } from '@/lib/utils'
 import {
   Plus, Database, LayoutDashboard, Table2, Settings,
-  Sun, Moon, Monitor, Menu, MessageSquareText,
+  Sun, Moon, Monitor, Menu, MessageSquareText, FileSpreadsheet,
 } from 'lucide-react'
 import type { CustomerRecord } from '@/lib/customers'
 
@@ -87,6 +87,7 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
             pathname.startsWith(`/customers/${c.slug}/entities`) ||
             pathname.startsWith(`/customers/${c.slug}/data`)
           const isTranscripts = pathname.startsWith(`/customers/${c.slug}/transcripts`)
+          const isReports = pathname.startsWith(`/customers/${c.slug}/reports`)
           const lastSync = c.lastSyncedAt
             ? `Synced ${formatRelativeTime(c.lastSyncedAt).toLowerCase()}`
             : 'Never synced'
@@ -120,6 +121,7 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
 
               {isActive && (
                 <div className="ml-5 mt-0.5 flex flex-col gap-0.5">
+                  {/* Analytics group */}
                   <Link
                     href={`/customers/${c.slug}/dashboard`}
                     onClick={onNavigate}
@@ -141,10 +143,25 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
                     Transcripts
                   </Link>
                   <Link
+                    href={`/customers/${c.slug}/reports`}
+                    onClick={onNavigate}
+                    className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-accent/60 hover:text-accent-foreground ${
+                      isReports ? 'bg-accent/50 text-accent-foreground font-medium' : 'text-muted-foreground'
+                    }`}
+                  >
+                    <FileSpreadsheet className="h-3 w-3" />
+                    Reports
+                  </Link>
+
+                  {/* Divider before admin items */}
+                  <div className="mx-3 my-1 border-t border-border/40" />
+
+                  {/* Admin group — visually lighter */}
+                  <Link
                     href={`/customers/${c.slug}/entities`}
                     onClick={onNavigate}
                     className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-accent/60 hover:text-accent-foreground ${
-                      isEntities ? 'bg-accent/50 text-accent-foreground font-medium' : 'text-muted-foreground'
+                      isEntities ? 'bg-accent/50 text-accent-foreground font-medium' : 'text-muted-foreground/60 hover:text-muted-foreground'
                     }`}
                   >
                     <Table2 className="h-3 w-3" />
@@ -176,7 +193,7 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
           rel="noopener noreferrer"
           className="text-center text-[10px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors pb-1"
         >
-          v0.4.0
+          v0.6.0
         </a>
       </div>
     </div>

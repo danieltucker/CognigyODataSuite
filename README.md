@@ -12,6 +12,7 @@ Cognigy Insights has gaps in filtering, custom search, and data export. This too
 - **Data Explorer** — searchable, filterable, sortable tables for all 10 OData entities with CSV and Excel export
 - **Analytics Dashboard** — session volume (area chart), unique users per day, top intents, channel distribution, execution time trends, NLU confidence, escalation rate, goals, top flows, LLM error detection, and agent evaluation — all filterable by date range, channel, endpoint, and snapshot
 - **Transcript Explorer** — browse and search session transcripts with styled chat bubbles, inline conversation events (flow changes, escalations, goals), session metadata, user profile stats, and full user history across sessions
+- **Reports** — freeform report builder with repeating time windows (weekly, monthly, custom), saved report configs, in-app data preview, and XLS/CSV export
 
 Each customer's data is fully isolated in its own `.duckdb` file. Nothing ever leaves your machine except outbound OData API calls to the configured Cognigy endpoint.
 
@@ -96,6 +97,17 @@ Click **Dashboard** in the sidebar sub-nav for any customer. Shows:
 - Agent Evaluation — surfaces simulator test pass/fail results with per-criterion breakdown (shown when simulator run data exists)
 
 All charts re-query the local database when you change the date range (defaults to last 7 days), channel, endpoint, or snapshot filter. Endpoint and snapshot support multi-select.
+
+## Reports
+
+Click **Reports** in the sidebar sub-nav to open the report builder for any customer.
+
+- **Saved reports** — left panel lists saved report configs; click any to load it; "New Report" to start fresh
+- **Freeform builder** — choose an entity (Analytics, Sessions, Conversations, Goal Events, Executed Steps), select which columns to include, and apply endpoint/snapshot filters
+- **Time window navigator** — define a window type (Weekly Sun–Sun, Weekly Mon–Mon, Monthly, or Custom N days), then navigate backward and forward through periods with prev/next arrows. The active window label shows the date range clearly. "Next" is disabled when the window would exceed today.
+- **In-app preview** — live table shows up to 100 rows for the active window with a total row count
+- **Export XLS / CSV** — exports the full filtered dataset (up to 50,000 rows) for the active window
+- **Copy Email Summary** — copies a formatted HTML table to clipboard for quick pasting into emails
 
 ## Transcripts
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0] — 2026-05-04
+
+### New Features
+
+- **Reports panel** — new section in the sidebar (above Sync Status) at `/customers/[slug]/reports`. A freeform report builder where you choose an entity, select columns, apply endpoint/snapshot filters, and navigate data by repeating time windows.
+- **Time window navigator** — the centrepiece of the Reports panel. Define a window type (Weekly Sun–Sun, Weekly Mon–Mon, Monthly, or Custom N days), then step backward and forward through valid windows with prev/next arrows. The active window date range is displayed prominently. "Next" is disabled when the next window would exceed today.
+- **Saved report configs** — name and save a report's column selections, filters, and window type. Saved reports appear in the left panel and can be re-opened to instantly re-run with any window.
+- **In-app data preview** — a live preview table refreshes as you change entity, columns, filters, or window, showing up to 100 rows with a total row count.
+- **Export XLS / CSV** — export the full filtered dataset (up to 50,000 rows) for the active window as XLS or CSV using the existing xlsx/papaparse packages.
+- **Copy Email Summary** — copies a formatted HTML table of the first 10 preview rows plus key metadata to the clipboard, ready to paste into an email.
+- **Sidebar visual separation** — a subtle divider line separates the analytics items (Dashboard, Transcripts, Reports) from the admin items (Sync Status). Admin items are rendered at reduced opacity when inactive, making the primary navigation items visually dominant.
+
+---
+
 ## [0.5.0] — 2026-05-04
 
 ### New Features
