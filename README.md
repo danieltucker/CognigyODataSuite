@@ -51,6 +51,8 @@ From the customer overview page:
 
 Imports use timestamp-cursor pagination for incremental entities (avoiding high `$skip` offsets, which Cognigy flags as a performance concern). Three entities (`Steps`, `Goal Steps`, `Goal Step Metrics`) use full-refresh since they have no timestamp field.
 
+**Initial sync limit**: the first sync for each incremental entity is capped to the past N days (default: 365) so that customers with years of historical data don't trigger an unbounded pull. This limit is configurable per customer via the "Historical data limit (days)" field in Add/Edit Customer. A manual full refresh bypasses the limit and fetches all available data.
+
 Scheduled auto-sync runs on the interval configured per customer (default: every 4 hours). The scheduler starts automatically when the dev server starts via Next.js instrumentation.
 
 ## OData entities

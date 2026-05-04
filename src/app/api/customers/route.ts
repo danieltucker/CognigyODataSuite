@@ -13,7 +13,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { displayName, odataUrl, apiKey, syncIntervalHours, color } = body
+  const { displayName, odataUrl, apiKey, syncIntervalHours, initialSyncDays, color } = body
 
   if (!displayName || !odataUrl || !apiKey) {
     return NextResponse.json({ error: 'displayName, odataUrl, and apiKey are required' }, { status: 400 })
@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
     odataUrl: odataUrl.replace(/\/$/, ''),
     apiKey,
     syncIntervalHours: syncIntervalHours ?? 4,
+    initialSyncDays: initialSyncDays ?? 365,
     color,
   })
 

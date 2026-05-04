@@ -277,9 +277,16 @@ export async function importEntity(
       await dbExec(conn, `DELETE FROM ${entityName}`)
     }
 
-    const since = (!isFullRefresh && state?.last_imported_at)
-      ? new Date(state.last_imported_at as unknown as string)
-      : null
+    const since = (() => {
+      if (isFullRefresh || !config.syncField) return null
+      if (state?.last_imported_at) return new Date(state.last_imported_at as unknown as string)
+      // First-ever sync: cap lookback so a long-running tenant doesn't pull years of data.
+      // options.full bypasses this via isFullRefresh above — intentional.
+      const limitDays = customer.initialSyncDays ?? 365
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - limitDays)
+      return cutoff
+    })()
 
     const pages =
       isFullRefresh || !config.syncField

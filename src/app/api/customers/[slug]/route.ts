@@ -16,13 +16,14 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ slug: 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const body = await req.json()
-  const { displayName, odataUrl, apiKey, syncIntervalHours, color } = body
+  const { displayName, odataUrl, apiKey, syncIntervalHours, initialSyncDays, color } = body
 
   const updated = updateCustomer(slug, {
     ...(displayName && { displayName }),
     ...(odataUrl && { odataUrl: odataUrl.replace(/\/$/, '') }),
     ...(apiKey && { apiKey }),
     ...(syncIntervalHours && { syncIntervalHours }),
+    ...(initialSyncDays && { initialSyncDays }),
     ...(color !== undefined && { color }),
   })
 

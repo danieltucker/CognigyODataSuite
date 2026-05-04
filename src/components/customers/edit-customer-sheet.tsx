@@ -14,6 +14,7 @@ interface CustomerForEdit {
   displayName: string
   odataUrl: string
   syncIntervalHours: number
+  initialSyncDays?: number
 }
 
 interface Props {
@@ -29,6 +30,7 @@ export function EditCustomerSheet({ customer, open, onOpenChange, onUpdated, onD
   const [odataUrl, setOdataUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [syncIntervalHours, setSyncIntervalHours] = useState('4')
+  const [initialSyncDays, setInitialSyncDays] = useState('365')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -40,6 +42,7 @@ export function EditCustomerSheet({ customer, open, onOpenChange, onUpdated, onD
       setOdataUrl(customer.odataUrl)
       setApiKey('')
       setSyncIntervalHours(String(customer.syncIntervalHours ?? 4))
+      setInitialSyncDays(String(customer.initialSyncDays ?? 365))
       setConfirmDelete(false)
       setError(null)
     }
@@ -57,6 +60,7 @@ export function EditCustomerSheet({ customer, open, onOpenChange, onUpdated, onD
         displayName,
         odataUrl,
         syncIntervalHours: Number(syncIntervalHours),
+        initialSyncDays: Number(initialSyncDays) || 365,
       }
       if (apiKey) body.apiKey = apiKey
 
@@ -151,6 +155,21 @@ export function EditCustomerSheet({ customer, open, onOpenChange, onUpdated, onD
                 <SelectItem value="24">Every 24 hours</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="edit-initialSyncDays">Historical data limit (days)</Label>
+            <Input
+              id="edit-initialSyncDays"
+              type="number"
+              min="1"
+              max="3650"
+              value={initialSyncDays}
+              onChange={(e) => setInitialSyncDays(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              How far back to fetch on first sync. Default: 365 days.
+            </p>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

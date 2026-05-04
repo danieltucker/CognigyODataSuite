@@ -21,6 +21,7 @@ export function AddCustomerSheet({ open, onOpenChange, onCreated }: Props) {
   const [odataUrl, setOdataUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [syncIntervalHours, setSyncIntervalHours] = useState('4')
+  const [initialSyncDays, setInitialSyncDays] = useState('365')
   const [testResult, setTestResult] = useState<TestResult>(null)
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -31,6 +32,7 @@ export function AddCustomerSheet({ open, onOpenChange, onCreated }: Props) {
     setOdataUrl('')
     setApiKey('')
     setSyncIntervalHours('4')
+    setInitialSyncDays('365')
     setTestResult(null)
     setError(null)
   }
@@ -64,7 +66,11 @@ export function AddCustomerSheet({ open, onOpenChange, onCreated }: Props) {
       const res = await fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName, odataUrl, apiKey, syncIntervalHours: Number(syncIntervalHours) }),
+        body: JSON.stringify({
+          displayName, odataUrl, apiKey,
+          syncIntervalHours: Number(syncIntervalHours),
+          initialSyncDays: Number(initialSyncDays) || 365,
+        }),
       })
       if (!res.ok) {
         const d = await res.json()
@@ -135,6 +141,21 @@ export function AddCustomerSheet({ open, onOpenChange, onCreated }: Props) {
                 <SelectItem value="24">Every 24 hours</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="initialSyncDays">Historical data limit (days)</Label>
+            <Input
+              id="initialSyncDays"
+              type="number"
+              min="1"
+              max="3650"
+              value={initialSyncDays}
+              onChange={(e) => setInitialSyncDays(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              How far back to fetch on first sync. Default: 365 days.
+            </p>
           </div>
 
           {testResult && (

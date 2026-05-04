@@ -146,8 +146,8 @@ const ENTITY_LABELS: Record<EntityName, string> = {
 }
 
 const WINDOW_LABELS: Record<WindowType, string> = {
-  'weekly-sun': 'Weekly (Sun–Sun)',
-  'weekly-mon': 'Weekly (Mon–Mon)',
+  'weekly-sun': 'Weekly (Sun–Sat)',
+  'weekly-mon': 'Weekly (Mon–Sun)',
   monthly: 'Monthly',
   custom: 'Custom days',
 }
@@ -188,8 +188,8 @@ function TimeWindowNavigator({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="weekly-sun">Weekly (Sun–Sun)</SelectItem>
-            <SelectItem value="weekly-mon">Weekly (Mon–Mon)</SelectItem>
+            <SelectItem value="weekly-sun">Weekly (Sun–Sat)</SelectItem>
+            <SelectItem value="weekly-mon">Weekly (Mon–Sun)</SelectItem>
             <SelectItem value="monthly">Monthly</SelectItem>
             <SelectItem value="custom">Custom days</SelectItem>
           </SelectContent>

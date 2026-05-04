@@ -8,6 +8,7 @@ export interface CustomerRecord {
   odataUrl: string
   apiKey: string
   syncIntervalHours: number
+  initialSyncDays: number
   createdAt: string
   lastSyncedAt: string | null
   color?: string

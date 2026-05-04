@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.1] — 2026-05-04
+
+### Bug Fixes & Improvements
+
+- **Initial sync limit** — incremental entities (Analytics, Conversations, Sessions, etc.) now cap their first-ever sync to the past N days (default 365) instead of fetching all historical data unbounded. Configurable per customer via the new "Historical data limit (days)" field in Add/Edit Customer. A manual full refresh (`Sync All` with full flag) still bypasses the limit.
+- **Reports column names corrected** — the column whitelist in the Reports preview and export endpoints was misaligned with the actual DuckDB schema (`userId` → `contactId` in Analytics, `text` → `inputText` in Conversations, `nodeId` → `stepLabel` in Executed Steps). Column picker in the UI updated to match.
+- **Reports infinite refetch fixed** — replaced `useCallback` + `useEffect` with a single `useEffect` + `AbortController`. Array dependencies are now stable string keys, preventing re-fetches on every render.
+- **Tailwind `require` error fixed** — `tailwind.config.ts` was using `require('tailwindcss-animate')` which fails in Node 22 ESM mode. Replaced with a top-level `import`.
+
+---
+
 ## [0.6.0] — 2026-05-04
 
 ### New Features
