@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { MultiSelect } from '@/components/ui/multi-select'
 import { formatRelativeTime } from '@/lib/utils'
 import {
   Search, MessageSquare, ChevronLeft, ChevronRight,
@@ -16,6 +17,7 @@ interface SessionRow {
   sessionId: string | null
   userId: string | null
   endpointName: string | null
+  snapshotName: string | null
   startedAt: string | null
   messageCount: number
   lastMessageAt: string | null
@@ -31,30 +33,62 @@ interface ApiResponse {
   pageSize: number
   hideEmpty: boolean
   availableEndpoints: string[]
+  availableSnapshots: string[]
 }
 
 interface Props {
   slug: string
 }
 
+const PAGE_SIZE = 25
+
 export function TranscriptList({ slug }: Props) {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  // Local state only for the search input to allow smooth typing before debounce
+  const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '')
+  const [endpointOpen, setEndpointOpen] = useState(false)
+  const [snapshotOpen, setSnapshotOpen] = useState(false)
+
+  // All other filters read directly from URL
+  const search = searchParams.get('search') ?? ''
+  const from = searchParams.get('from') ?? ''
+  const to = searchParams.get('to') ?? ''
+  const endpoints = searchParams.getAll('endpoint')
+  const snapshots = searchParams.getAll('snapshot')
+  const hideEmpty = searchParams.get('hideEmpty') !== 'false'
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
+
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
-  const [endpoint, setEndpoint] = useState('')
-  const [hideEmpty, setHideEmpty] = useState(true)
-  const [page, setPage] = useState(1)
-  const PAGE_SIZE = 25
 
+  // Sync searchInput with URL on back-navigation
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300)
-    return () => clearTimeout(t)
-  }, [search])
+    setSearchInput(searchParams.get('search') ?? '')
+  }, [searchParams])
 
-  useEffect(() => { setPage(1) }, [debouncedSearch, from, to, endpoint, hideEmpty])
+  // Debounce search input → URL
+  useEffect(() => {
+    const t = setTimeout(() => {
+      updateParams({ search: searchInput || null, page: null })
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchInput]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function updateParams(updates: Record<string, string | string[] | null>) {
+    const params = new URLSearchParams(searchParams.toString())
+    for (const [key, value] of Object.entries(updates)) {
+      params.delete(key)
+      if (Array.isArray(value)) {
+        value.forEach((v) => params.append(key, v))
+      } else if (value !== null) {
+        params.set(key, value)
+      }
+    }
+    router.replace(`${pathname}?${params}`)
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -64,28 +98,26 @@ export function TranscriptList({ slug }: Props) {
         pageSize: String(PAGE_SIZE),
         hideEmpty: String(hideEmpty),
       })
-      if (debouncedSearch) params.set('search', debouncedSearch)
+      if (search) params.set('search', search)
       if (from) params.set('from', from)
       if (to) params.set('to', to)
-      if (endpoint) params.set('endpoint', endpoint)
+      endpoints.forEach((e) => params.append('endpoint', e))
+      snapshots.forEach((s) => params.append('snapshot', s))
 
       const res = await fetch(`/api/customers/${slug}/transcripts?${params}`)
       if (res.ok) setData(await res.json())
     } finally {
       setLoading(false)
     }
-  }, [slug, page, debouncedSearch, from, to, endpoint])
+  }, [slug, page, search, from, to, endpoints.join(','), snapshots.join(','), hideEmpty]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
 
-  const hasFilters = search || from || to || endpoint || !hideEmpty
+  const hasFilters = search || from || to || endpoints.length > 0 || snapshots.length > 0 || !hideEmpty
 
   function clearFilters() {
-    setSearch('')
-    setFrom('')
-    setTo('')
-    setEndpoint('')
-    setHideEmpty(true)
+    setSearchInput('')
+    router.replace(pathname)
   }
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0
@@ -95,7 +127,7 @@ export function TranscriptList({ slug }: Props) {
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-          <MessageSquareText className="h-4.5 w-4.5 text-primary" />
+          <MessageSquareText className="h-4 w-4 text-primary" />
         </div>
         <div>
           <h1 className="text-lg font-semibold">Transcripts</h1>
@@ -108,62 +140,76 @@ export function TranscriptList({ slug }: Props) {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="relative flex-1 min-w-0 sm:min-w-[200px] sm:max-w-[320px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search session ID or user ID…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-sm"
-          />
+      <div className="flex flex-col gap-2">
+        {/* Row 1: search + hide-empty + clear */}
+        <div className="flex gap-2 flex-wrap items-center">
+          <div className="relative flex-1 min-w-0 sm:max-w-[300px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search session ID or user ID…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="pl-8 h-8 text-sm"
+            />
+          </div>
+
+          <Button
+            variant={hideEmpty ? 'outline' : 'secondary'}
+            size="sm"
+            className="h-8 px-3 text-xs shrink-0"
+            onClick={() => updateParams({ hideEmpty: hideEmpty ? 'false' : 'true', page: null })}
+            title={hideEmpty ? 'Showing sessions with messages only — click to include empty sessions' : 'Showing all sessions including those with no messages'}
+          >
+            {hideEmpty ? 'Has messages' : 'Show empty'}
+          </Button>
+
+          {hasFilters && (
+            <Button variant="ghost" size="sm" className="h-8 px-2 gap-1 text-xs shrink-0" onClick={clearFilters}>
+              <X className="h-3 w-3" />
+              Clear
+            </Button>
+          )}
         </div>
 
-        <div className="flex gap-2 flex-wrap">
+        {/* Row 2: date + endpoint + snapshot */}
+        <div className="flex gap-2 flex-wrap items-center">
           <Input
             type="date"
             value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className="h-8 text-sm w-36"
+            onChange={(e) => updateParams({ from: e.target.value || null, page: null })}
+            className="h-8 text-sm w-36 shrink-0"
             title="From date"
           />
           <Input
             type="date"
             value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="h-8 text-sm w-36"
+            onChange={(e) => updateParams({ to: e.target.value || null, page: null })}
+            className="h-8 text-sm w-36 shrink-0"
             title="To date"
           />
 
           {(data?.availableEndpoints?.length ?? 0) > 0 && (
-            <Select value={endpoint || 'all'} onValueChange={(v) => setEndpoint(v === 'all' ? '' : v)}>
-              <SelectTrigger className="h-8 text-sm w-40">
-                <SelectValue placeholder="All endpoints" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All endpoints</SelectItem>
-                {data!.availableEndpoints.map((ep) => (
-                  <SelectItem key={ep} value={ep}>{ep}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              options={data!.availableEndpoints}
+              value={endpoints}
+              onChange={(v) => updateParams({ endpoint: v.length ? v : null, page: null })}
+              placeholder="All endpoints"
+              className="w-44 shrink-0"
+              open={endpointOpen}
+              onOpenChange={setEndpointOpen}
+            />
           )}
 
-          <Button
-            variant={hideEmpty ? 'outline' : 'secondary'}
-            size="sm"
-            className="h-8 px-3 text-xs"
-            onClick={() => setHideEmpty((v) => !v)}
-            title={hideEmpty ? 'Currently hiding sessions with no messages — click to show all' : 'Showing all sessions including empty ones'}
-          >
-            {hideEmpty ? 'Hide empty' : 'Show empty'}
-          </Button>
-
-          {hasFilters && (
-            <Button variant="ghost" size="sm" className="h-8 px-2 gap-1 text-xs" onClick={clearFilters}>
-              <X className="h-3 w-3" />
-              Clear
-            </Button>
+          {(data?.availableSnapshots?.length ?? 0) > 0 && (
+            <MultiSelect
+              options={data!.availableSnapshots}
+              value={snapshots}
+              onChange={(v) => updateParams({ snapshot: v.length ? v : null, page: null })}
+              placeholder="All snapshots"
+              className="w-44 shrink-0"
+              open={snapshotOpen}
+              onOpenChange={setSnapshotOpen}
+            />
           )}
         </div>
       </div>
@@ -191,7 +237,12 @@ export function TranscriptList({ slug }: Props) {
         {data && data.sessions.length > 0 && (
           <div className={`divide-y transition-opacity ${loading ? 'opacity-50' : ''}`}>
             {data.sessions.map((s) => (
-              <SessionRow key={s.sessionId ?? Math.random()} session={s} slug={slug} />
+              <SessionRow
+                key={s.sessionId ?? Math.random()}
+                session={s}
+                slug={slug}
+                currentSearch={searchParams.toString()}
+              />
             ))}
           </div>
         )}
@@ -213,19 +264,17 @@ export function TranscriptList({ slug }: Props) {
               variant="outline"
               size="sm"
               className="h-7 px-2"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => updateParams({ page: String(page - 1) })}
               disabled={page <= 1}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="px-2 text-xs">
-              {page} / {totalPages}
-            </span>
+            <span className="px-2 text-xs">{page} / {totalPages}</span>
             <Button
               variant="outline"
               size="sm"
               className="h-7 px-2"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() => updateParams({ page: String(page + 1) })}
               disabled={page >= totalPages}
             >
               <ChevronRight className="h-4 w-4" />
@@ -237,16 +286,23 @@ export function TranscriptList({ slug }: Props) {
   )
 }
 
-function SessionRow({ session: s, slug }: { session: SessionRow; slug: string }) {
+function SessionRow({
+  session: s, slug, currentSearch,
+}: {
+  session: SessionRow
+  slug: string
+  currentSearch: string
+}) {
   const sessionId = s.sessionId ?? '—'
-  const shortId = sessionId.length > 20 ? sessionId.slice(-16) : sessionId
+  const shortId = sessionId.length > 20 ? `…${sessionId.slice(-16)}` : sessionId
+  // Pass current search params so back navigation restores filters
+  const href = `/customers/${slug}/transcripts/${encodeURIComponent(sessionId)}${currentSearch ? `?from=${encodeURIComponent(currentSearch)}` : ''}`
 
   return (
     <Link
       href={`/customers/${slug}/transcripts/${encodeURIComponent(sessionId)}`}
       className="flex items-center gap-3 px-4 py-3 hover:bg-accent/40 transition-colors group"
     >
-      {/* Icon */}
       <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
         (s.handoverEscalations ?? 0) > 0
           ? 'bg-orange-500/10 text-orange-500'
@@ -258,7 +314,6 @@ function SessionRow({ session: s, slug }: { session: SessionRow; slug: string })
         }
       </div>
 
-      {/* Main info */}
       <div className="flex flex-1 min-w-0 flex-col gap-0.5">
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs text-foreground truncate" title={sessionId}>
@@ -291,7 +346,6 @@ function SessionRow({ session: s, slug }: { session: SessionRow; slug: string })
         </div>
       </div>
 
-      {/* Right: count + time */}
       <div className="flex flex-col items-end gap-0.5 shrink-0">
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           <MessageSquare className="h-3 w-3" />

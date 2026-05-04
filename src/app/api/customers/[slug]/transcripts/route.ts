@@ -6,6 +6,7 @@ export interface SessionRow {
   sessionId: string | null
   userId: string | null
   endpointName: string | null
+  snapshotName: string | null
   startedAt: string | null
   messageCount: number
   lastMessageAt: string | null
@@ -27,21 +28,33 @@ export async function GET(
   const search = url.searchParams.get('search') ?? ''
   const from = url.searchParams.get('from') ?? ''
   const to = url.searchParams.get('to') ?? ''
-  const endpoint = url.searchParams.get('endpoint') ?? ''
+  const endpoints = url.searchParams.getAll('endpoint')
+  const snapshots = url.searchParams.getAll('snapshot')
+  const hideEmpty = url.searchParams.get('hideEmpty') !== 'false'
 
   const conn = await getDb(slug)
-
-  const hideEmpty = url.searchParams.get('hideEmpty') !== 'false'
 
   const conditions: string[] = []
   const binds: unknown[] = []
 
-  // Sessions with a null sessionId can never match a conversation — exclude them always.
+  // Sessions with a null sessionId can never match a conversation — exclude always.
   conditions.push(`s."sessionId" IS NOT NULL`)
 
   if (from) { conditions.push(`s."startedAt" >= ?`); binds.push(from) }
   if (to) { conditions.push(`s."startedAt" <= ?`); binds.push(to + 'T23:59:59.999Z') }
-  if (endpoint) { conditions.push(`s."endpointName" = ?`); binds.push(endpoint) }
+
+  if (endpoints.length > 0) {
+    const placeholders = endpoints.map(() => '?').join(', ')
+    conditions.push(`s."endpointName" IN (${placeholders})`)
+    binds.push(...endpoints)
+  }
+
+  if (snapshots.length > 0) {
+    const placeholders = snapshots.map(() => '?').join(', ')
+    conditions.push(`s."snapshotName" IN (${placeholders})`)
+    binds.push(...snapshots)
+  }
+
   if (search) {
     conditions.push(`(s."sessionId" ILIKE ? OR s."userId" ILIKE ?)`)
     binds.push(`%${search}%`, `%${search}%`)
@@ -52,8 +65,6 @@ export async function GET(
   const where = `WHERE ${conditions.join(' AND ')}`
   const offset = (page - 1) * pageSize
 
-  // Both the count and data queries need the LEFT JOIN when hideEmpty is active
-  // so the messageCount condition can be evaluated.
   const msgSubquery = `LEFT JOIN (
       SELECT "sessionId", COUNT(*) AS messageCount, MAX("timestamp") AS lastMessageAt
       FROM conversations
@@ -72,6 +83,7 @@ export async function GET(
       s."sessionId",
       s."userId",
       s."endpointName",
+      s."snapshotName",
       s."startedAt",
       s."handoverEscalations",
       s."rating",
@@ -86,10 +98,16 @@ export async function GET(
     [...binds, pageSize, offset]
   )
 
-  const endpoints = await dbQuery<{ endpointName: string }>(
-    conn,
-    `SELECT DISTINCT "endpointName" FROM sessions WHERE "endpointName" IS NOT NULL ORDER BY "endpointName"`
-  )
+  const [endpointRows, snapshotRows] = await Promise.all([
+    dbQuery<{ endpointName: string }>(
+      conn,
+      `SELECT DISTINCT "endpointName" FROM sessions WHERE "endpointName" IS NOT NULL ORDER BY "endpointName"`
+    ),
+    dbQuery<{ snapshotName: string }>(
+      conn,
+      `SELECT DISTINCT "snapshotName" FROM sessions WHERE "snapshotName" IS NOT NULL ORDER BY "snapshotName"`
+    ),
+  ])
 
   return NextResponse.json({
     sessions,
@@ -97,6 +115,7 @@ export async function GET(
     page,
     pageSize,
     hideEmpty,
-    availableEndpoints: endpoints.map((e) => e.endpointName),
+    availableEndpoints: endpointRows.map((e) => e.endpointName),
+    availableSnapshots: snapshotRows.map((s) => s.snapshotName),
   })
 }

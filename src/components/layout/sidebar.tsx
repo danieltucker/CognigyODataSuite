@@ -131,16 +131,6 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
                     Dashboard
                   </Link>
                   <Link
-                    href={`/customers/${c.slug}/entities`}
-                    onClick={onNavigate}
-                    className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-accent/60 hover:text-accent-foreground ${
-                      isEntities ? 'bg-accent/50 text-accent-foreground font-medium' : 'text-muted-foreground'
-                    }`}
-                  >
-                    <Table2 className="h-3 w-3" />
-                    Sync Status
-                  </Link>
-                  <Link
                     href={`/customers/${c.slug}/transcripts`}
                     onClick={onNavigate}
                     className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-accent/60 hover:text-accent-foreground ${
@@ -149,6 +139,16 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
                   >
                     <MessageSquareText className="h-3 w-3" />
                     Transcripts
+                  </Link>
+                  <Link
+                    href={`/customers/${c.slug}/entities`}
+                    onClick={onNavigate}
+                    className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-accent/60 hover:text-accent-foreground ${
+                      isEntities ? 'bg-accent/50 text-accent-foreground font-medium' : 'text-muted-foreground'
+                    }`}
+                  >
+                    <Table2 className="h-3 w-3" />
+                    Sync Status
                   </Link>
                 </div>
               )}

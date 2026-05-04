@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -10,8 +10,13 @@ import { formatRelativeTime } from '@/lib/utils'
 import {
   ArrowLeft, MessageSquare, PhoneCall, Star,
   User, Bot, Headphones, Copy, Check, ChevronRight,
-  Calendar, Hash, Globe, Layers, BookOpen,
+  Calendar, Hash, Globe, Layers, BookOpen, Target,
+  GitBranch, AlertTriangle,
 } from 'lucide-react'
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface SessionData {
   sessionId: string | null
@@ -42,6 +47,13 @@ interface Message {
   ratingComment: string | null
 }
 
+interface GoalEvent {
+  id: string
+  timestamp: string | null
+  goalId: string | null
+  goalName: string | null
+}
+
 interface UserSession {
   sessionId: string | null
   startedAt: string | null
@@ -50,11 +62,92 @@ interface UserSession {
   handoverEscalations: number | null
 }
 
+interface UserProfile {
+  totalSessions: number
+  totalMessages: number
+  firstSeen: string | null
+  lastSeen: string | null
+  escalationCount: number
+  avgRating: number | null
+}
+
 interface ApiData {
   session: SessionData
   messages: Message[]
+  goalEvents: GoalEvent[]
   userSessions: UserSession[]
+  userProfile: UserProfile | null
 }
+
+// ---------------------------------------------------------------------------
+// Timeline item types
+// ---------------------------------------------------------------------------
+
+type TimelineItem =
+  | { kind: 'message'; data: Message }
+  | { kind: 'flow_change'; flowName: string; timestamp: string }
+  | { kind: 'handover_request'; timestamp: string }
+  | { kind: 'goal_event'; goalName: string | null; goalId: string | null; timestamp: string }
+
+function buildTimeline(messages: Message[], goalEvents: GoalEvent[]): TimelineItem[] {
+  const items: TimelineItem[] = []
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]
+    const prev = messages[i - 1]
+
+    // Flow change marker — insert before the message that changes flow
+    if (
+      prev &&
+      msg.flowName &&
+      prev.flowName &&
+      msg.flowName !== prev.flowName
+    ) {
+      items.push({
+        kind: 'flow_change',
+        flowName: msg.flowName,
+        timestamp: msg.timestamp ?? '',
+      })
+    }
+
+    items.push({ kind: 'message', data: msg })
+
+    // Handover request — insert after the message that triggered it
+    if (msg.inHandoverRequest === true) {
+      items.push({ kind: 'handover_request', timestamp: msg.timestamp ?? '' })
+    }
+  }
+
+  // Merge goal events by timestamp position
+  for (const ge of goalEvents) {
+    if (!ge.timestamp) continue
+    const geTime = new Date(ge.timestamp).getTime()
+    // Find insertion index: after the last message with timestamp <= geTime
+    let insertAt = 0
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      const ts =
+        item.kind === 'message'
+          ? item.data.timestamp
+          : item.kind === 'flow_change' || item.kind === 'handover_request' || item.kind === 'goal_event'
+          ? item.timestamp
+          : null
+      if (ts && new Date(ts).getTime() <= geTime) insertAt = i + 1
+    }
+    items.splice(insertAt, 0, {
+      kind: 'goal_event',
+      goalName: ge.goalName,
+      goalId: ge.goalId,
+      timestamp: ge.timestamp,
+    })
+  }
+
+  return items
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 
 interface Props {
   slug: string
@@ -89,9 +182,7 @@ export function TranscriptDetail({ slug, sessionId }: Props) {
   }, [slug, sessionId])
 
   useEffect(() => {
-    if (data) {
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-    }
+    if (data) setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
   }, [data])
 
   if (loading) {
@@ -114,12 +205,13 @@ export function TranscriptDetail({ slug, sessionId }: Props) {
     )
   }
 
-  const { session, messages, userSessions } = data
-  const decodedSessionId = decodeURIComponent(sessionId)
+  const { session, messages, goalEvents, userSessions, userProfile } = data
+  const decodedId = decodeURIComponent(sessionId)
+  const timeline = buildTimeline(messages, goalEvents)
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header / breadcrumb */}
+      {/* Header */}
       <div className="flex items-center gap-2 border-b px-4 py-3 bg-card shrink-0">
         <Button
           variant="ghost"
@@ -132,10 +224,7 @@ export function TranscriptDetail({ slug, sessionId }: Props) {
         </Button>
         <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
         <span className="font-mono text-xs text-muted-foreground truncate">
-          {decodedSessionId.length > 30
-            ? `…${decodedSessionId.slice(-24)}`
-            : decodedSessionId
-          }
+          {decodedId.length > 30 ? `…${decodedId.slice(-24)}` : decodedId}
         </span>
         {(session.handoverEscalations ?? 0) > 0 && (
           <Badge variant="outline" className="ml-auto text-[10px] px-1.5 py-0 text-orange-500 border-orange-500/30 shrink-0">
@@ -144,20 +233,65 @@ export function TranscriptDetail({ slug, sessionId }: Props) {
         )}
       </div>
 
-      {/* Body: chat + sidebar */}
+      {/* Body */}
       <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
-        {/* Chat panel */}
+        {/* Chat */}
         <div className="flex flex-col flex-1 min-h-0 lg:min-h-full overflow-y-auto">
           <div className="flex flex-col gap-0.5 px-4 py-4">
-            {messages.length === 0 && (
+            {timeline.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 gap-2">
                 <MessageSquare className="h-8 w-8 text-muted-foreground/20" />
                 <p className="text-sm text-muted-foreground">No messages in this session</p>
               </div>
             )}
-            {messages.map((msg, i) => (
-              <MessageBubble key={msg.id} message={msg} prev={messages[i - 1] ?? null} />
-            ))}
+
+            {timeline.map((item, i) => {
+              if (item.kind === 'message') {
+                const prevItem = timeline[i - 1]
+                const prevMsg = prevItem?.kind === 'message' ? prevItem.data : null
+                return (
+                  <MessageBubble
+                    key={item.data.id}
+                    message={item.data}
+                    prev={prevMsg}
+                  />
+                )
+              }
+              if (item.kind === 'flow_change') {
+                return (
+                  <EventMarker
+                    key={`flow-${i}`}
+                    icon={<GitBranch className="h-3 w-3" />}
+                    label={`Flow: ${item.flowName}`}
+                    color="text-blue-500"
+                    bg="bg-blue-500/8"
+                  />
+                )
+              }
+              if (item.kind === 'handover_request') {
+                return (
+                  <EventMarker
+                    key={`handover-${i}`}
+                    icon={<PhoneCall className="h-3 w-3" />}
+                    label="Handover requested"
+                    color="text-orange-500"
+                    bg="bg-orange-500/8"
+                  />
+                )
+              }
+              if (item.kind === 'goal_event') {
+                return (
+                  <EventMarker
+                    key={`goal-${i}`}
+                    icon={<Target className="h-3 w-3" />}
+                    label={item.goalName ? `Goal: ${item.goalName}` : 'Goal achieved'}
+                    color="text-emerald-500"
+                    bg="bg-emerald-500/8"
+                  />
+                )
+              }
+              return null
+            })}
             <div ref={chatEndRef} />
           </div>
         </div>
@@ -165,18 +299,44 @@ export function TranscriptDetail({ slug, sessionId }: Props) {
         {/* Sidebar */}
         <div className="shrink-0 lg:w-72 xl:w-80 border-t lg:border-t-0 lg:border-l overflow-y-auto bg-card/50">
           <SessionInfoPanel session={session} messageCount={messages.length} />
+
+          {userProfile && (
+            <>
+              <Separator />
+              <UserProfilePanel profile={userProfile} userId={session.userId} />
+            </>
+          )}
+
           {userSessions.length > 0 && (
             <>
               <Separator />
-              <UserHistoryPanel
-                userId={session.userId}
-                sessions={userSessions}
-                slug={slug}
-              />
+              <UserHistoryPanel userId={session.userId} sessions={userSessions} slug={slug} />
             </>
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Event marker
+// ---------------------------------------------------------------------------
+
+function EventMarker({
+  icon, label, color, bg,
+}: {
+  icon: React.ReactNode
+  label: string
+  color: string
+  bg: string
+}) {
+  return (
+    <div className="flex justify-center my-2">
+      <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium ${color} ${bg} border-current/20`}>
+        {icon}
+        {label}
+      </span>
     </div>
   )
 }
@@ -187,6 +347,7 @@ export function TranscriptDetail({ slug, sessionId }: Props) {
 
 function MessageBubble({ message: msg, prev }: { message: Message; prev: Message | null }) {
   const [copied, setCopied] = useState(false)
+  const [jsonExpanded, setJsonExpanded] = useState(false)
 
   const isUser = msg.source === 'user'
   const isAgent = msg.inHandoverConversation === true && msg.source !== 'user'
@@ -194,17 +355,24 @@ function MessageBubble({ message: msg, prev }: { message: Message; prev: Message
 
   const prevTimestamp = prev?.timestamp ? new Date(prev.timestamp).getTime() : 0
   const thisTimestamp = msg.timestamp ? new Date(msg.timestamp).getTime() : 0
-  const showTimestamp = !prev || thisTimestamp - prevTimestamp > 5 * 60 * 1000 // 5-min gap
+  const showTimestamp = !prev || thisTimestamp - prevTimestamp > 5 * 60 * 1000
 
   const prevSource = prev?.source
   const sameSource = prevSource === msg.source
   const isFirstInGroup = !sameSource || showTimestamp
 
-  if (!text && !msg.inputData) return null
+  // Parse inputData for structured content
+  let parsedData: unknown = null
+  if (!text && msg.inputData) {
+    try { parsedData = JSON.parse(msg.inputData) } catch { /* leave null */ }
+  }
+
+  if (!text && !parsedData) return null
 
   function handleCopy() {
-    if (text) {
-      navigator.clipboard.writeText(text)
+    const content = text ?? (parsedData ? JSON.stringify(parsedData, null, 2) : '')
+    if (content) {
+      navigator.clipboard.writeText(content)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     }
@@ -223,64 +391,75 @@ function MessageBubble({ message: msg, prev }: { message: Message; prev: Message
         </div>
       )}
 
-      <div className={`flex items-end gap-1.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-        {/* Avatar — only for first in group */}
-        <div className={`shrink-0 ${isFirstInGroup ? 'visible' : 'invisible'} ${isUser ? 'hidden' : 'block'}`}>
-          <div className={`flex h-6 w-6 items-center justify-center rounded-full text-white ${
-            isAgent ? 'bg-orange-500' : 'bg-primary/70'
-          }`}>
-            {isAgent
-              ? <Headphones className="h-3 w-3" />
-              : <Bot className="h-3 w-3" />
-            }
+      <div className={`flex items-end gap-2 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+        {/* Avatar */}
+        {!isUser && (
+          <div className={`shrink-0 self-end ${isFirstInGroup ? 'visible' : 'invisible'}`}>
+            <div className={`flex h-6 w-6 items-center justify-center rounded-full text-white ${
+              isAgent ? 'bg-orange-500' : 'bg-primary/70'
+            }`}>
+              {isAgent ? <Headphones className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Bubble */}
-        <div
-          className={`group relative max-w-[80%] sm:max-w-[65%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+        <div className={`max-w-[75%] sm:max-w-[60%] ${isUser ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+          <div className={`relative rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
             isUser
               ? 'rounded-br-sm bg-primary text-primary-foreground'
               : isAgent
               ? 'rounded-bl-sm bg-orange-500/10 text-orange-900 dark:text-orange-200 border border-orange-500/20'
               : 'rounded-bl-sm bg-muted text-foreground'
-          }`}
-        >
-          {text ? (
-            <span className="whitespace-pre-wrap break-words">{text}</span>
-          ) : (
-            <span className="italic opacity-50 text-xs">[structured data]</span>
-          )}
+          }`}>
+            {text ? (
+              <span className="whitespace-pre-wrap break-words">{text}</span>
+            ) : parsedData ? (
+              <div>
+                <button
+                  onClick={() => setJsonExpanded((v) => !v)}
+                  className="flex items-center gap-1 text-xs opacity-70 hover:opacity-100 transition-opacity"
+                >
+                  <span>{jsonExpanded ? '▾' : '▸'}</span>
+                  <span>Structured data</span>
+                </button>
+                {jsonExpanded && (
+                  <pre className="mt-2 text-[11px] leading-relaxed whitespace-pre-wrap break-all overflow-x-auto max-h-64 overflow-y-auto">
+                    {JSON.stringify(parsedData, null, 2)}
+                  </pre>
+                )}
+              </div>
+            ) : null}
+          </div>
 
-          {/* Copy button on hover */}
-          {text && (
-            <button
-              onClick={handleCopy}
-              className={`absolute top-1 ${isUser ? 'left-1' : 'right-1'} opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity p-0.5 rounded`}
-            >
-              {copied
-                ? <Check className="h-3 w-3" />
-                : <Copy className="h-3 w-3" />
-              }
-            </button>
+          {/* Source label */}
+          {!isUser && isFirstInGroup && (
+            <span className={`text-[10px] ${isAgent ? 'text-orange-500' : 'text-muted-foreground/60'} ml-0.5`}>
+              {isAgent ? 'Live Agent' : (msg.flowName ?? 'Bot')}
+            </span>
           )}
         </div>
 
-        {/* User avatar placeholder for alignment */}
-        {isUser && isFirstInGroup && (
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary">
-            <User className="h-3 w-3 text-secondary-foreground" />
+        {/* User avatar */}
+        {isUser && (
+          <div className={`shrink-0 self-end ${isFirstInGroup ? 'visible' : 'invisible'}`}>
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary">
+              <User className="h-3 w-3 text-secondary-foreground" />
+            </div>
           </div>
         )}
-        {isUser && !isFirstInGroup && <div className="h-6 w-6 shrink-0" />}
-      </div>
 
-      {/* Source label (first in group only, for bot/agent) */}
-      {!isUser && isFirstInGroup && (
-        <div className={`ml-8 mt-0.5 text-[10px] ${isAgent ? 'text-orange-500' : 'text-muted-foreground/60'}`}>
-          {isAgent ? 'Live Agent' : (msg.flowName ?? 'Bot')}
-        </div>
-      )}
+        {/* Copy button — always visible, outside the bubble */}
+        <button
+          onClick={handleCopy}
+          title="Copy message"
+          className={`shrink-0 self-end mb-1 flex h-6 w-6 items-center justify-center rounded-full opacity-30 hover:opacity-100 hover:bg-muted transition-all ${
+            copied ? 'opacity-100 text-emerald-500' : ''
+          }`}
+        >
+          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        </button>
+      </div>
     </div>
   )
 }
@@ -305,7 +484,6 @@ function SessionInfoPanel({ session: s, messageCount }: { session: SessionData; 
       <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
         Session Details
       </h2>
-
       <div className="flex flex-col gap-2">
         <InfoRow
           icon={<Hash className="h-3.5 w-3.5" />}
@@ -316,14 +494,13 @@ function SessionInfoPanel({ session: s, messageCount }: { session: SessionData; 
                 {s.sessionId ? `…${s.sessionId.slice(-16)}` : '—'}
               </span>
               {s.sessionId && (
-                <button onClick={copySessionId} className="shrink-0 opacity-50 hover:opacity-100 transition-opacity">
+                <button onClick={copySessionId} className="shrink-0 opacity-40 hover:opacity-100 transition-opacity">
                   {copiedId ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                 </button>
               )}
             </div>
           }
         />
-
         <InfoRow
           icon={<Calendar className="h-3.5 w-3.5" />}
           label="Started"
@@ -335,19 +512,16 @@ function SessionInfoPanel({ session: s, messageCount }: { session: SessionData; 
             : '—'
           }
         />
-
         <InfoRow
           icon={<Globe className="h-3.5 w-3.5" />}
           label="Endpoint"
           value={s.endpointName ?? '—'}
         />
-
         <InfoRow
           icon={<MessageSquare className="h-3.5 w-3.5" />}
           label="Messages"
           value={String(messageCount)}
         />
-
         {(s.stepsCount ?? 0) > 0 && (
           <InfoRow
             icon={<Layers className="h-3.5 w-3.5" />}
@@ -355,17 +529,13 @@ function SessionInfoPanel({ session: s, messageCount }: { session: SessionData; 
             value={String(s.stepsCount)}
           />
         )}
-
         {(s.handoverEscalations ?? 0) > 0 && (
           <InfoRow
             icon={<PhoneCall className="h-3.5 w-3.5 text-orange-500" />}
             label="Escalations"
-            value={
-              <span className="text-orange-500">{s.handoverEscalations}</span>
-            }
+            value={<span className="text-orange-500">{s.handoverEscalations}</span>}
           />
         )}
-
         {s.snapshotName && (
           <InfoRow
             icon={<BookOpen className="h-3.5 w-3.5" />}
@@ -373,7 +543,6 @@ function SessionInfoPanel({ session: s, messageCount }: { session: SessionData; 
             value={s.snapshotName}
           />
         )}
-
         {s.rating !== null && (
           <InfoRow
             icon={<Star className="h-3.5 w-3.5 text-amber-500" />}
@@ -389,8 +558,6 @@ function SessionInfoPanel({ session: s, messageCount }: { session: SessionData; 
           />
         )}
       </div>
-
-      {/* User ID */}
       {s.userId && (
         <div className="mt-1 rounded-md bg-muted/50 px-3 py-2">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">User ID</p>
@@ -401,23 +568,51 @@ function SessionInfoPanel({ session: s, messageCount }: { session: SessionData; 
   )
 }
 
-function InfoRow({
-  icon, label, value,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: React.ReactNode
-}) {
+// ---------------------------------------------------------------------------
+// User profile panel
+// ---------------------------------------------------------------------------
+
+function UserProfilePanel({ profile: p, userId }: { profile: UserProfile; userId: string | null }) {
   return (
-    <div className="flex items-start gap-2">
-      <span className="mt-0.5 text-muted-foreground/60 shrink-0">{icon}</span>
-      <div className="flex flex-1 min-w-0 flex-col">
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wide leading-tight">
-          {label}
-        </span>
-        <span className="text-xs text-foreground leading-snug mt-0.5 truncate">
-          {value}
-        </span>
+    <div className="p-4 flex flex-col gap-3">
+      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+        Contact Profile
+      </h2>
+      <div className="flex flex-col gap-2">
+        <InfoRow
+          icon={<Calendar className="h-3.5 w-3.5" />}
+          label="First seen"
+          value={p.firstSeen ? formatRelativeTime(p.firstSeen) : '—'}
+        />
+        <InfoRow
+          icon={<Calendar className="h-3.5 w-3.5" />}
+          label="Last seen"
+          value={p.lastSeen ? formatRelativeTime(p.lastSeen) : '—'}
+        />
+        <InfoRow
+          icon={<MessageSquare className="h-3.5 w-3.5" />}
+          label="Total sessions"
+          value={p.totalSessions.toLocaleString()}
+        />
+        <InfoRow
+          icon={<MessageSquare className="h-3.5 w-3.5" />}
+          label="Total messages"
+          value={p.totalMessages.toLocaleString()}
+        />
+        {p.escalationCount > 0 && (
+          <InfoRow
+            icon={<PhoneCall className="h-3.5 w-3.5 text-orange-500" />}
+            label="Escalations"
+            value={<span className="text-orange-500">{p.escalationCount}</span>}
+          />
+        )}
+        {p.avgRating !== null && (
+          <InfoRow
+            icon={<Star className="h-3.5 w-3.5 text-amber-500" />}
+            label="Avg rating"
+            value={<span className="text-amber-500 font-medium">{p.avgRating}</span>}
+          />
+        )}
       </div>
     </div>
   )
@@ -428,9 +623,7 @@ function InfoRow({
 // ---------------------------------------------------------------------------
 
 function UserHistoryPanel({
-  userId,
-  sessions,
-  slug,
+  userId, sessions, slug,
 }: {
   userId: string | null
   sessions: UserSession[]
@@ -440,13 +633,12 @@ function UserHistoryPanel({
     <div className="p-4 flex flex-col gap-3">
       <div>
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          User History
+          Session History
         </h2>
         <p className="text-[11px] text-muted-foreground mt-0.5">
           {sessions.length} other session{sessions.length !== 1 ? 's' : ''}
         </p>
       </div>
-
       <div className="flex flex-col gap-1">
         {sessions.map((s) => {
           const sid = s.sessionId ?? ''
@@ -481,6 +673,26 @@ function UserHistoryPanel({
             </Link>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Shared info row
+// ---------------------------------------------------------------------------
+
+function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="mt-0.5 text-muted-foreground/60 shrink-0">{icon}</span>
+      <div className="flex flex-1 min-w-0 flex-col">
+        <span className="text-[10px] text-muted-foreground uppercase tracking-wide leading-tight">
+          {label}
+        </span>
+        <span className="text-xs text-foreground leading-snug mt-0.5 truncate">
+          {value}
+        </span>
       </div>
     </div>
   )

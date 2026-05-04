@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { getCustomer } from '@/lib/customers'
 import { TranscriptList } from '@/components/transcripts/transcript-list'
@@ -11,5 +12,9 @@ export default async function TranscriptsPage({
   const customer = getCustomer(slug)
   if (!customer) notFound()
 
-  return <TranscriptList slug={slug} />
+  return (
+    <Suspense>
+      <TranscriptList slug={slug} />
+    </Suspense>
+  )
 }
