@@ -6,6 +6,7 @@ import { ALL_ENTITIES, type EntityName, type ImportState } from '@/db/schema'
 interface EntityStatus extends ImportState {
   recordCount: number
   lastJobStatus: string | null
+  lastJobErrorMessage: string | null
 }
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -33,9 +34,9 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ slug: 
         `SELECT COUNT(*) as count FROM ${entity}`
       )
 
-      const [lastJob] = await dbQuery<{ status: string }>(
+      const [lastJob] = await dbQuery<{ status: string; error_message: string | null }>(
         conn,
-        `SELECT status FROM import_jobs WHERE entity_name = ? ORDER BY started_at DESC LIMIT 1`,
+        `SELECT status, error_message FROM import_jobs WHERE entity_name = ? ORDER BY started_at DESC LIMIT 1`,
         [entity]
       )
 
@@ -43,6 +44,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ slug: 
         ...state,
         recordCount: Number(countRow?.count ?? 0),
         lastJobStatus: lastJob?.status ?? null,
+        lastJobErrorMessage: lastJob?.error_message ?? null,
       }
     })
   )

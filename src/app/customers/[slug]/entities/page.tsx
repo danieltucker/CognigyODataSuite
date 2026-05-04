@@ -21,6 +21,7 @@ interface EntityStatus {
   sync_mode: string
   recordCount: number
   lastJobStatus: string | null
+  lastJobErrorMessage: string | null
 }
 
 function toISOOrNull(v: string | Date | null | undefined): string | null {
@@ -40,9 +41,9 @@ async function getEntityStatuses(slug: string): Promise<EntityStatus[]> {
         conn,
         `SELECT COUNT(*) as count FROM ${entity}`
       )
-      const [lastJob] = await dbQuery<{ status: string }>(
+      const [lastJob] = await dbQuery<{ status: string; error_message: string | null }>(
         conn,
-        `SELECT status FROM import_jobs WHERE entity_name = ? ORDER BY started_at DESC LIMIT 1`,
+        `SELECT status, error_message FROM import_jobs WHERE entity_name = ? ORDER BY started_at DESC LIMIT 1`,
         [entity]
       )
       return {
@@ -53,6 +54,7 @@ async function getEntityStatuses(slug: string): Promise<EntityStatus[]> {
         sync_mode: state?.sync_mode ?? 'incremental',
         recordCount: Number(countRow?.count ?? 0),
         lastJobStatus: lastJob?.status ?? null,
+        lastJobErrorMessage: lastJob?.error_message ?? null,
       } satisfies EntityStatus
     })
   )

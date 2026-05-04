@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import {
   RefreshCw, BarChart3, MessageSquare, GitBranch, Zap,
   Users, PhoneCall, Target, List, TrendingUp, Calendar,
+  AlertTriangle, Clock,
 } from 'lucide-react'
 import { formatRelativeTime, formatCount } from '@/lib/utils'
 import type { EntityName } from '@/db/schema'
@@ -51,12 +52,15 @@ const ENTITY_COLORS: Record<EntityName, string> = {
   goal_events: '#a78bfa',
 }
 
+const STALE_THRESHOLD_MS = 8 * 60 * 60 * 1000 // 8 hours
+
 interface EntityStatus {
   entity_name: EntityName
   last_imported_at: string | null
   updated_at: string | null
   recordCount: number
   lastJobStatus: string | null
+  lastJobErrorMessage: string | null
   sync_mode: string
 }
 
@@ -76,13 +80,20 @@ function statusBadge(jobStatus: string | null, updatedAt: string | null): {
   return { label: 'Synced', variant: 'success' }
 }
 
+function isStale(updatedAt: string | null, syncMode: string): boolean {
+  if (!updatedAt || syncMode === 'full_refresh') return false
+  return Date.now() - new Date(updatedAt).getTime() > STALE_THRESHOLD_MS
+}
+
 export function EntityCard({ status, slug, onSyncComplete }: Props) {
   const [syncing, setSyncing] = useState(false)
+  const [showError, setShowError] = useState(false)
 
   async function handlePull(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
     setSyncing(true)
+    setShowError(false)
     try {
       await fetch(`/api/customers/${slug}/import`, {
         method: 'POST',
@@ -96,22 +107,23 @@ export function EntityCard({ status, slug, onSyncComplete }: Props) {
     }
   }
 
-  const badge = statusBadge(syncing ? 'running' : status.lastJobStatus, status.updated_at)
+  const currentStatus = syncing ? 'running' : status.lastJobStatus
+  const badge = statusBadge(currentStatus, status.updated_at)
   const color = ENTITY_COLORS[status.entity_name]
+  const stale = isStale(status.updated_at, status.sync_mode)
+  const hasFailed = currentStatus === 'failed' && status.lastJobErrorMessage
   const updatedText = status.updated_at
     ? `Updated ${formatRelativeTime(status.updated_at).toLowerCase()}`
     : 'Never synced'
 
   return (
     <Card className="relative overflow-hidden transition-all duration-200 hover:shadow-md hover:border-primary/30 group cursor-pointer">
-      {/* Stretched link covers the whole card */}
       <Link
         href={`/customers/${slug}/data/${status.entity_name}`}
         className="absolute inset-0 z-[1]"
         aria-label={`Explore ${ENTITY_LABELS[status.entity_name]} data`}
       />
 
-      {/* Top accent strip */}
       <div className="h-0.5 w-full" style={{ backgroundColor: color }} />
 
       <CardContent className="p-4">
@@ -123,9 +135,16 @@ export function EntityCard({ status, slug, onSyncComplete }: Props) {
             </span>
             <p className="text-sm font-semibold leading-tight">{ENTITY_LABELS[status.entity_name]}</p>
           </div>
-          <Badge variant={badge.variant} className="shrink-0 text-[11px] relative z-[2]">
-            {badge.label}
-          </Badge>
+          <div className="flex items-center gap-1.5 shrink-0 relative z-[2]">
+            {stale && !hasFailed && (
+              <span title="Data may be stale — no sync in over 8 hours">
+                <Clock className="h-3.5 w-3.5 text-amber-500" />
+              </span>
+            )}
+            <Badge variant={badge.variant} className="text-[11px]">
+              {badge.label}
+            </Badge>
+          </div>
         </div>
 
         {/* Record count */}
@@ -139,17 +158,38 @@ export function EntityCard({ status, slug, onSyncComplete }: Props) {
         {/* Footer row */}
         <div className="flex items-center justify-between">
           <p className="text-[11px] text-muted-foreground">{updatedText}</p>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="relative z-[2] h-7 px-2 text-xs opacity-60 group-hover:opacity-100 transition-opacity"
-            onClick={handlePull}
-            disabled={syncing}
-          >
-            <RefreshCw className={`h-3 w-3 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing' : 'Pull'}
-          </Button>
+          <div className="flex items-center gap-1 relative z-[2]">
+            {hasFailed && (
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowError((v) => !v) }}
+                className="flex h-7 w-7 items-center justify-center rounded hover:bg-destructive/10 text-destructive transition-colors"
+                title="View error details"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs opacity-60 group-hover:opacity-100 transition-opacity"
+              onClick={handlePull}
+              disabled={syncing}
+            >
+              <RefreshCw className={`h-3 w-3 ${syncing ? 'animate-spin' : ''} mr-1`} />
+              {syncing ? 'Syncing' : 'Pull'}
+            </Button>
+          </div>
         </div>
+
+        {/* Error detail — expanded inline */}
+        {showError && hasFailed && (
+          <div
+            className="relative z-[2] mt-2 rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-[11px] text-destructive leading-relaxed"
+            onClick={(e) => e.preventDefault()}
+          >
+            {status.lastJobErrorMessage}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

@@ -12,6 +12,7 @@ interface EntityStatus {
   updated_at: string | null
   recordCount: number
   lastJobStatus: string | null
+  lastJobErrorMessage: string | null
   sync_mode: string
 }
 

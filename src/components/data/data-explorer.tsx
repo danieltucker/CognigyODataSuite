@@ -214,57 +214,37 @@ export function DataExplorer({ slug, entity }: Props) {
   return (
     <div className="flex flex-col min-h-full">
       {/* Header / Breadcrumb */}
-      <div className="flex items-center gap-2 px-6 py-4 border-b shrink-0">
+      <div className="flex items-center gap-2 px-4 sm:px-6 py-4 border-b shrink-0">
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors group"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors group shrink-0"
         >
           <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-          <span>Back</span>
+          <span className="hidden sm:inline">Back</span>
         </button>
-        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30" />
-        <h1 className="text-sm font-medium">{ENTITY_LABELS[entity]}</h1>
-        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-          {total.toLocaleString()} records
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />
+        <h1 className="text-sm font-medium truncate">{ENTITY_LABELS[entity]}</h1>
+        <span className="ml-auto text-xs text-muted-foreground tabular-nums shrink-0">
+          {total.toLocaleString()}
         </span>
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col gap-2 px-6 py-3 border-b shrink-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Search */}
-          <div className="relative">
+      <div className="flex flex-col gap-2 px-4 sm:px-6 py-3 border-b shrink-0">
+        <div className="flex items-center gap-2">
+          {/* Search — grows to fill available space */}
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <Input
-              className="pl-8 h-8 w-56 text-sm"
-              placeholder={`Search ${config.searchCols.slice(0, 2).join(', ')}…`}
+              className="pl-8 h-8 w-full text-sm"
+              placeholder={`Search…`}
               value={searchInput}
               onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
 
-          {/* Date range */}
-          {config.dateCol && (
-            <div className="flex items-center gap-1.5">
-              <Input
-                type="date"
-                className="h-8 w-36 text-sm"
-                value={from}
-                max={today}
-                onChange={(e) => { setFrom(e.target.value); setPage(1) }}
-              />
-              <span className="text-xs text-muted-foreground">–</span>
-              <Input
-                type="date"
-                className="h-8 w-36 text-sm"
-                value={to}
-                max={today}
-                onChange={(e) => { setTo(e.target.value); setPage(1) }}
-              />
-            </div>
-          )}
-
-          <div className="ml-auto flex items-center gap-2">
+          {/* Right-side controls */}
+          <div className="flex items-center gap-1.5 shrink-0">
             {/* Column visibility */}
             <div className="relative" ref={colPanelRef}>
               <Button
@@ -273,8 +253,8 @@ export function DataExplorer({ slug, entity }: Props) {
                 className="h-8 text-xs"
                 onClick={() => setShowColPanel((v) => !v)}
               >
-                <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" />
-                Columns
+                <SlidersHorizontal className="h-3.5 w-3.5 sm:mr-1.5" />
+                <span className="hidden sm:inline">Columns</span>
               </Button>
               {showColPanel && (
                 <div className="absolute right-0 top-10 z-50 w-52 rounded-md border bg-popover shadow-lg p-2 max-h-80 overflow-y-auto">
@@ -303,15 +283,36 @@ export function DataExplorer({ slug, entity }: Props) {
 
             {/* Exports */}
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => handleExport('csv')}>
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              CSV
+              <Download className="h-3.5 w-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">CSV</span>
             </Button>
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => handleExport('xlsx')}>
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              Excel
+              <Download className="h-3.5 w-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">Excel</span>
             </Button>
           </div>
         </div>
+
+        {/* Date range — second row */}
+        {config.dateCol && (
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="date"
+              className="h-8 flex-1 min-w-0 sm:w-36 sm:flex-none text-sm"
+              value={from}
+              max={today}
+              onChange={(e) => { setFrom(e.target.value); setPage(1) }}
+            />
+            <span className="text-xs text-muted-foreground shrink-0">–</span>
+            <Input
+              type="date"
+              className="h-8 flex-1 min-w-0 sm:w-36 sm:flex-none text-sm"
+              value={to}
+              max={today}
+              onChange={(e) => { setTo(e.target.value); setPage(1) }}
+            />
+          </div>
+        )}
 
         {/* Column filters row — only shown when there are filterable columns */}
         {activeFilters.length > 0 && (

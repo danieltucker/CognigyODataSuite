@@ -144,16 +144,23 @@ export function Dashboard({ slug, displayName }: Props) {
   return (
     <div className="flex flex-col min-h-full">
       {/* Header */}
-      <div className="flex flex-wrap items-center gap-2 px-6 py-4 border-b shrink-0 bg-card/50">
-        <div className="mr-auto">
-          <h1 className="text-base font-semibold">{displayName}</h1>
-          <p className="text-xs text-muted-foreground">Analytics Dashboard</p>
+      <div className="border-b shrink-0 bg-card/50">
+        {/* Title row */}
+        <div className="flex items-center gap-3 px-6 py-4">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-base font-semibold truncate">{displayName}</h1>
+            <p className="text-xs text-muted-foreground">Analytics Dashboard</p>
+          </div>
+          <Button variant="outline" size="sm" className="h-8 px-2 shrink-0" onClick={fetchData} disabled={loading}>
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Filter row */}
+        <div className="flex flex-wrap items-center gap-2 px-6 pb-3">
           {data?.availableChannels && data.availableChannels.length > 1 && (
             <Select value={channel} onValueChange={setChannel}>
-              <SelectTrigger className="h-8 w-36 text-xs">
+              <SelectTrigger className="h-8 w-full xs:w-36 text-xs">
                 <SelectValue placeholder="All channels" />
               </SelectTrigger>
               <SelectContent>
@@ -167,7 +174,7 @@ export function Dashboard({ slug, displayName }: Props) {
 
           {data?.availableEndpoints && data.availableEndpoints.length > 1 && (
             <Select value={endpoint} onValueChange={setEndpoint}>
-              <SelectTrigger className="h-8 w-40 text-xs">
+              <SelectTrigger className="h-8 w-full xs:w-44 text-xs">
                 <SelectValue placeholder="All endpoints" />
               </SelectTrigger>
               <SelectContent>
@@ -179,24 +186,32 @@ export function Dashboard({ slug, displayName }: Props) {
             </Select>
           )}
 
-          <Input
-            type="date"
-            className="h-8 w-36 text-xs font-mono"
-            value={from}
-            max={today}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-          <span className="text-xs text-muted-foreground">–</span>
-          <Input
-            type="date"
-            className="h-8 w-36 text-xs font-mono"
-            value={to}
-            max={today}
-            onChange={(e) => setTo(e.target.value)}
-          />
-          <Button variant="outline" size="sm" className="h-8 px-2" onClick={fetchData} disabled={loading}>
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="date"
+              className="h-8 w-36 text-xs font-mono"
+              value={from}
+              max={today}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+            <span className="text-xs text-muted-foreground">–</span>
+            <Input
+              type="date"
+              className="h-8 w-36 text-xs font-mono"
+              value={to}
+              max={today}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </div>
+
+          {(from || to || channel !== 'all' || endpoint !== 'all') && (
+            <button
+              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => { setFrom(''); setTo(''); setChannel('all'); setEndpoint('all') }}
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       </div>
 
