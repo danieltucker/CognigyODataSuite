@@ -171,10 +171,18 @@ data/                       ← gitignored — never committed
 
 ## Security
 
-- `data/` is gitignored. API keys and all customer data stay on your machine and are never committed.
+**This tool is designed for localhost use only.** It has no authentication. Any process on your machine that can make HTTP requests to `localhost:3000` can access all customer data and trigger OData syncs. Do not:
+- Run it on a shared machine
+- Expose the port via port-forwarding, reverse proxy, or ngrok
+- Deploy it to a server without first adding authentication
+
+Other security notes:
+
+- `data/` is gitignored. API keys and all customer data stay on your machine and are never committed. Be aware that cloud sync services (OneDrive, Dropbox, iCloud) may back up the `data/` directory — consider excluding it from your sync client if API key confidentiality matters.
 - API keys are stored in plaintext in `data/customers.json`. This is intentional for a local single-user tool. Do not deploy this to a shared server without adding authentication and encrypting credentials at rest.
 - API keys are never returned by the REST API — GET responses redact the key and return `apiKeySet: true` instead.
-- All database queries use parameterised statements. Sort column names are validated against a per-entity whitelist before interpolation.
+- OData URLs must use HTTPS — the app rejects HTTP URLs on save.
+- All database queries use parameterised statements. Table and column names in report queries are validated against a per-entity whitelist before interpolation.
 
 ## Environment
 

@@ -102,13 +102,15 @@ export function DateRangePicker({ from, to, onChange, className }: DateRangePick
           {rangeLabel(from, to)}
         </span>
         {hasRange ? (
-          <button
-            type="button"
+          <span
+            role="button"
+            tabIndex={0}
             onClick={(e) => { e.stopPropagation(); onChange('', ''); setOpen(false) }}
-            className="ml-0.5 rounded opacity-50 hover:opacity-100 transition-opacity"
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onChange('', ''); setOpen(false) } }}
+            className="ml-0.5 rounded opacity-50 hover:opacity-100 transition-opacity cursor-pointer"
           >
             <X className="h-3 w-3" />
-          </button>
+          </span>
         ) : (
           <ChevronDown className={cn('h-3.5 w-3.5 opacity-50 transition-transform', open && 'rotate-180')} />
         )}

@@ -19,6 +19,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'displayName, odataUrl, and apiKey are required' }, { status: 400 })
   }
 
+  if (!odataUrl.startsWith('https://')) {
+    return NextResponse.json({ error: 'odataUrl must use HTTPS' }, { status: 400 })
+  }
+
   const customer = createCustomer({
     displayName,
     odataUrl: odataUrl.replace(/\/$/, ''),

@@ -1,6 +1,6 @@
 {
   "name": "cognigy-odata-suite",
-  "version": "0.6.1",
+  "version": "0.6.3",
   "private": true,
   "scripts": {
     "dev": "next dev",

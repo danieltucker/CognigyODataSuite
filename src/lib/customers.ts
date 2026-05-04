@@ -27,7 +27,12 @@ export function listCustomers(): CustomerRecord[] {
   return JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf-8')) as CustomerRecord[]
 }
 
+export function isValidSlug(slug: string): boolean {
+  return /^[a-z0-9-]+$/.test(slug)
+}
+
 export function getCustomer(slug: string): CustomerRecord | null {
+  if (!isValidSlug(slug)) return null
   return listCustomers().find((c) => c.slug === slug) ?? null
 }
 

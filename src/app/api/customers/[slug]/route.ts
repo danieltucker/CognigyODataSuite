@@ -18,6 +18,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ slug
   const body = await req.json()
   const { displayName, odataUrl, apiKey, syncIntervalHours, initialSyncDays, color } = body
 
+  if (odataUrl && !odataUrl.startsWith('https://')) {
+    return NextResponse.json({ error: 'odataUrl must use HTTPS' }, { status: 400 })
+  }
+
   const updated = updateCustomer(slug, {
     ...(displayName && { displayName }),
     ...(odataUrl && { odataUrl: odataUrl.replace(/\/$/, '') }),

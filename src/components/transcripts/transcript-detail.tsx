@@ -159,6 +159,7 @@ export function TranscriptDetail({ slug, sessionId }: Props) {
   const [data, setData] = useState<ApiData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [mobileTab, setMobileTab] = useState<'chat' | 'details'>('chat')
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -209,6 +210,53 @@ export function TranscriptDetail({ slug, sessionId }: Props) {
   const decodedId = decodeURIComponent(sessionId)
   const timeline = buildTimeline(messages, goalEvents)
 
+  const chatContent = (
+    <div className="flex flex-col gap-0.5 px-4 py-4">
+      {timeline.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 gap-2">
+          <MessageSquare className="h-8 w-8 text-muted-foreground/20" />
+          <p className="text-sm text-muted-foreground">No messages in this session</p>
+        </div>
+      )}
+      {timeline.map((item, i) => {
+        if (item.kind === 'message') {
+          const prevItem = timeline[i - 1]
+          const prevMsg = prevItem?.kind === 'message' ? prevItem.data : null
+          return <MessageBubble key={item.data.id} message={item.data} prev={prevMsg} />
+        }
+        if (item.kind === 'flow_change') {
+          return <EventMarker key={`flow-${i}`} icon={<GitBranch className="h-3 w-3" />} label={`Flow: ${item.flowName}`} color="text-blue-500" bg="bg-blue-500/10" />
+        }
+        if (item.kind === 'handover_request') {
+          return <EventMarker key={`handover-${i}`} icon={<PhoneCall className="h-3 w-3" />} label="Handover requested" color="text-orange-500" bg="bg-orange-500/10" />
+        }
+        if (item.kind === 'goal_event') {
+          return <EventMarker key={`goal-${i}`} icon={<Target className="h-3 w-3" />} label={item.goalName ? `Goal: ${item.goalName}` : 'Goal achieved'} color="text-emerald-500" bg="bg-emerald-500/10" />
+        }
+        return null
+      })}
+      <div ref={chatEndRef} />
+    </div>
+  )
+
+  const detailsContent = (
+    <>
+      <SessionInfoPanel session={session} messageCount={messages.length} />
+      {userProfile && (
+        <>
+          <Separator />
+          <UserProfilePanel profile={userProfile} userId={session.userId} />
+        </>
+      )}
+      {userSessions.length > 0 && (
+        <>
+          <Separator />
+          <UserHistoryPanel userId={session.userId} sessions={userSessions} slug={slug} />
+        </>
+      )}
+    </>
+  )
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -233,86 +281,45 @@ export function TranscriptDetail({ slug, sessionId }: Props) {
         )}
       </div>
 
-      {/* Body */}
-      <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
-        {/* Chat */}
-        <div className="flex flex-col flex-1 min-h-0 lg:min-h-full overflow-y-auto">
-          <div className="flex flex-col gap-0.5 px-4 py-4">
-            {timeline.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-16 gap-2">
-                <MessageSquare className="h-8 w-8 text-muted-foreground/20" />
-                <p className="text-sm text-muted-foreground">No messages in this session</p>
-              </div>
-            )}
+      {/* Mobile tab bar — only visible below lg */}
+      <div className="flex border-b bg-card shrink-0 lg:hidden">
+        <button
+          onClick={() => setMobileTab('chat')}
+          className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${
+            mobileTab === 'chat'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Conversation
+          {messages.length > 0 && (
+            <span className="ml-1.5 text-[10px] text-muted-foreground">({messages.length})</span>
+          )}
+        </button>
+        <button
+          onClick={() => setMobileTab('details')}
+          className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${
+            mobileTab === 'details'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Details
+        </button>
+      </div>
 
-            {timeline.map((item, i) => {
-              if (item.kind === 'message') {
-                const prevItem = timeline[i - 1]
-                const prevMsg = prevItem?.kind === 'message' ? prevItem.data : null
-                return (
-                  <MessageBubble
-                    key={item.data.id}
-                    message={item.data}
-                    prev={prevMsg}
-                  />
-                )
-              }
-              if (item.kind === 'flow_change') {
-                return (
-                  <EventMarker
-                    key={`flow-${i}`}
-                    icon={<GitBranch className="h-3 w-3" />}
-                    label={`Flow: ${item.flowName}`}
-                    color="text-blue-500"
-                    bg="bg-blue-500/8"
-                  />
-                )
-              }
-              if (item.kind === 'handover_request') {
-                return (
-                  <EventMarker
-                    key={`handover-${i}`}
-                    icon={<PhoneCall className="h-3 w-3" />}
-                    label="Handover requested"
-                    color="text-orange-500"
-                    bg="bg-orange-500/8"
-                  />
-                )
-              }
-              if (item.kind === 'goal_event') {
-                return (
-                  <EventMarker
-                    key={`goal-${i}`}
-                    icon={<Target className="h-3 w-3" />}
-                    label={item.goalName ? `Goal: ${item.goalName}` : 'Goal achieved'}
-                    color="text-emerald-500"
-                    bg="bg-emerald-500/8"
-                  />
-                )
-              }
-              return null
-            })}
-            <div ref={chatEndRef} />
-          </div>
+      {/* Mobile body — single-column, natural document flow */}
+      <div className="flex flex-col flex-1 overflow-y-auto lg:hidden">
+        {mobileTab === 'chat' ? chatContent : detailsContent}
+      </div>
+
+      {/* Desktop body — side-by-side with independent scroll areas */}
+      <div className="hidden lg:flex flex-1 min-h-0">
+        <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+          {chatContent}
         </div>
-
-        {/* Sidebar */}
-        <div className="shrink-0 lg:w-72 xl:w-80 border-t lg:border-t-0 lg:border-l overflow-y-auto bg-card/50">
-          <SessionInfoPanel session={session} messageCount={messages.length} />
-
-          {userProfile && (
-            <>
-              <Separator />
-              <UserProfilePanel profile={userProfile} userId={session.userId} />
-            </>
-          )}
-
-          {userSessions.length > 0 && (
-            <>
-              <Separator />
-              <UserHistoryPanel userId={session.userId} sessions={userSessions} slug={slug} />
-            </>
-          )}
+        <div className="shrink-0 w-72 xl:w-80 border-l overflow-y-auto bg-card/50">
+          {detailsContent}
         </div>
       </div>
     </div>

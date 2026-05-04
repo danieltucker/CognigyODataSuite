@@ -58,7 +58,7 @@ export function MultiSelect({
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full mt-1 w-full min-w-[180px] max-h-56 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md">
+        <div className="absolute z-50 top-full mt-1 left-0 min-w-[280px] max-h-56 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md">
           {options.length === 0 ? (
             <p className="px-3 py-2 text-xs text-muted-foreground">No options available</p>
           ) : (
@@ -77,7 +77,7 @@ export function MultiSelect({
                   )}>
                     {selected && <Check className="h-3 w-3" />}
                   </div>
-                  <span className="truncate">{option}</span>
+                  <span className="break-all">{option}</span>
                 </button>
               )
             })

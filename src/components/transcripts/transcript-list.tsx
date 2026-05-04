@@ -9,9 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { DateRangePicker, defaultDateRange } from '@/components/ui/date-range-picker'
 import { formatRelativeTime } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import {
   Search, MessageSquare, ChevronLeft, ChevronRight,
-  PhoneCall, Star, X, MessageSquareText,
+  PhoneCall, Star, X, MessageSquareText, Check, Globe, BookOpen,
 } from 'lucide-react'
 
 interface SessionRow {
@@ -48,13 +49,11 @@ export function TranscriptList({ slug }: Props) {
   const router = useRouter()
   const pathname = usePathname()
 
-  // Local state only for the search input to allow smooth typing before debounce
   const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '')
   const [endpointOpen, setEndpointOpen] = useState(false)
   const [snapshotOpen, setSnapshotOpen] = useState(false)
   const [didInit, setDidInit] = useState(false)
 
-  // All other filters read directly from URL
   const search = searchParams.get('search') ?? ''
   const from = searchParams.get('from') ?? ''
   const to = searchParams.get('to') ?? ''
@@ -66,7 +65,6 @@ export function TranscriptList({ slug }: Props) {
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // On first mount, default to last 7 days if no date params in URL
   useEffect(() => {
     if (didInit) return
     setDidInit(true)
@@ -79,12 +77,10 @@ export function TranscriptList({ slug }: Props) {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync searchInput with URL on back-navigation
   useEffect(() => {
     setSearchInput(searchParams.get('search') ?? '')
   }, [searchParams])
 
-  // Debounce search input → URL
   useEffect(() => {
     const t = setTimeout(() => {
       updateParams({ search: searchInput || null, page: null })
@@ -156,9 +152,9 @@ export function TranscriptList({ slug }: Props) {
 
       {/* Filters */}
       <div className="flex flex-col gap-2">
-        {/* Row 1: search + hide-empty + clear */}
-        <div className="flex gap-2 flex-wrap items-center">
-          <div className="relative flex-1 min-w-0 sm:max-w-[300px]">
+        {/* Row 1: search + with-messages toggle + clear */}
+        <div className="flex gap-2 items-center">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <Input
               placeholder="Search session ID or user ID…"
@@ -168,20 +164,25 @@ export function TranscriptList({ slug }: Props) {
             />
           </div>
 
-          <Button
-            variant={hideEmpty ? 'outline' : 'secondary'}
-            size="sm"
-            className="h-8 px-3 text-xs shrink-0"
+          {/* Consistent "With messages" toggle — filled when active */}
+          <button
             onClick={() => updateParams({ hideEmpty: hideEmpty ? 'false' : 'true', page: null })}
-            title={hideEmpty ? 'Showing sessions with messages only — click to include empty sessions' : 'Showing all sessions including those with no messages'}
+            title={hideEmpty ? 'Only showing sessions with messages — click to include empty sessions' : 'Showing all sessions — click to hide empty sessions'}
+            className={cn(
+              'flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors',
+              hideEmpty
+                ? 'border-primary/40 bg-primary/10 text-foreground hover:bg-primary/15'
+                : 'border-input bg-background text-muted-foreground hover:bg-accent hover:text-foreground'
+            )}
           >
-            {hideEmpty ? 'Has messages' : 'Show empty'}
-          </Button>
+            <Check className={cn('h-3 w-3 transition-opacity', hideEmpty ? 'opacity-100 text-primary' : 'opacity-30')} />
+            With messages
+          </button>
 
           {hasFilters && (
             <Button variant="ghost" size="sm" className="h-8 px-2 gap-1 text-xs shrink-0" onClick={clearFilters}>
               <X className="h-3 w-3" />
-              Clear
+              <span className="hidden sm:inline">Clear</span>
             </Button>
           )}
         </div>
@@ -243,7 +244,7 @@ export function TranscriptList({ slug }: Props) {
         {data && data.sessions.length > 0 && (
           <div className={`divide-y transition-opacity ${loading ? 'opacity-50' : ''}`}>
             {data.sessions.map((s) => (
-              <SessionRow
+              <SessionRowItem
                 key={s.sessionId ?? Math.random()}
                 session={s}
                 slug={slug}
@@ -292,7 +293,7 @@ export function TranscriptList({ slug }: Props) {
   )
 }
 
-function SessionRow({
+function SessionRowItem({
   session: s, slug, currentSearch,
 }: {
   session: SessionRow
@@ -300,64 +301,81 @@ function SessionRow({
   currentSearch: string
 }) {
   const sessionId = s.sessionId ?? '—'
-  const shortId = sessionId.length > 20 ? `…${sessionId.slice(-16)}` : sessionId
-  // Pass current search params so back navigation restores filters
+  // No JS truncation — show the full ID, CSS truncate clips from the right only if needed
   const href = `/customers/${slug}/transcripts/${encodeURIComponent(sessionId)}${currentSearch ? `?from=${encodeURIComponent(currentSearch)}` : ''}`
+  const isEscalated = (s.handoverEscalations ?? 0) > 0
 
   return (
     <Link
-      href={`/customers/${slug}/transcripts/${encodeURIComponent(sessionId)}`}
+      href={href}
       className="flex items-center gap-3 px-4 py-3 hover:bg-accent/40 transition-colors group"
     >
-      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-        (s.handoverEscalations ?? 0) > 0
-          ? 'bg-orange-500/10 text-orange-500'
-          : 'bg-primary/10 text-primary'
-      }`}>
-        {(s.handoverEscalations ?? 0) > 0
+      {/* Icon */}
+      <div className={cn(
+        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+        isEscalated ? 'bg-orange-500/10 text-orange-500' : 'bg-primary/10 text-primary'
+      )}>
+        {isEscalated
           ? <PhoneCall className="h-3.5 w-3.5" />
           : <MessageSquare className="h-3.5 w-3.5" />
         }
       </div>
 
-      <div className="flex flex-1 min-w-0 flex-col gap-0.5">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-foreground truncate" title={sessionId}>
-            {shortId}
+      {/* Main content — flex-1 uses all available space; truncation happens rightward */}
+      <div className="flex flex-1 min-w-0 flex-col gap-1">
+        {/* Top line: session ID + status badges */}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-mono text-xs font-medium text-foreground truncate" title={sessionId}>
+            {sessionId}
           </span>
-          {(s.handoverEscalations ?? 0) > 0 && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-orange-500 border-orange-500/30 hidden sm:inline-flex">
+          {isEscalated && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-orange-500 border-orange-500/30 shrink-0">
               Escalated
             </Badge>
           )}
           {s.rating !== null && (
-            <span className="hidden sm:flex items-center gap-0.5 text-[10px] text-amber-500">
+            <span className="flex items-center gap-0.5 text-[10px] text-amber-500 shrink-0">
               <Star className="h-3 w-3 fill-amber-500" />
               {s.rating}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+
+        {/* Bottom line: user ID (grows to fill) + endpoint chip + snapshot chip */}
+        <div className="flex items-center gap-2 min-w-0 overflow-hidden text-[11px] text-muted-foreground">
           {s.userId && (
-            <span className="truncate max-w-[120px] sm:max-w-[200px]" title={s.userId}>
+            <span className="flex-1 min-w-0 truncate" title={s.userId}>
               {s.userId}
             </span>
           )}
           {s.endpointName && (
-            <>
-              <span className="shrink-0">·</span>
-              <span className="truncate max-w-[100px]">{s.endpointName}</span>
-            </>
+            <span
+              className="inline-flex items-center gap-1 shrink-0 max-w-[160px] truncate rounded bg-muted px-1.5 py-0.5 text-[10px] leading-tight"
+              title={s.endpointName}
+            >
+              <Globe className="h-2.5 w-2.5 shrink-0 opacity-60" />
+              <span className="truncate">{s.endpointName}</span>
+            </span>
+          )}
+          {s.snapshotName && (
+            <span
+              className="inline-flex items-center gap-1 shrink-0 max-w-[160px] truncate rounded bg-muted px-1.5 py-0.5 text-[10px] leading-tight"
+              title={s.snapshotName}
+            >
+              <BookOpen className="h-2.5 w-2.5 shrink-0 opacity-60" />
+              <span className="truncate">{s.snapshotName}</span>
+            </span>
           )}
         </div>
       </div>
 
-      <div className="flex flex-col items-end gap-0.5 shrink-0">
+      {/* Right: message count + time — always visible, never truncated */}
+      <div className="flex flex-col items-end gap-0.5 shrink-0 pl-2">
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           <MessageSquare className="h-3 w-3" />
           {s.messageCount}
         </span>
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-[11px] text-muted-foreground whitespace-nowrap">
           {s.startedAt ? formatRelativeTime(s.startedAt) : '—'}
         </span>
       </div>

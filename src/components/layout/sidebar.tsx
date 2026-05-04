@@ -193,7 +193,7 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
           rel="noopener noreferrer"
           className="text-center text-[10px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors pb-1"
         >
-          v0.6.1
+          v0.6.3
         </a>
       </div>
     </div>

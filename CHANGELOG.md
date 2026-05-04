@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.6.3] — 2026-05-04
+
+### UI Improvements
+
+- **Transcript toggle clarity** — replaced the confusing "Has messages" / "Show empty" toggle with a consistent "With messages" filter chip that shows a checkmark when active and dims when inactive. The label never changes, so the current state is always unambiguous.
+- **Transcript session rows** — session rows now display both endpoint name and snapshot name as small muted chips (with Globe and BookOpen icons to distinguish them), alongside the user ID. User ID takes all remaining space and truncates rightward only when needed — no artificial width cap. Session ID shows last 28 characters for better identification. Badges (Escalated, rating) are always visible.
+- **Transcript detail — mobile tab navigation** — on mobile the transcript detail now shows a "Conversation / Details" tab bar. Conversation tab shows the full chat in natural document flow (no collapsed height). Details tab shows Session Details, Contact Profile, and Session History. Desktop view is unchanged.
+- **Filter dropdown width** — endpoint and snapshot dropdowns now expand to a minimum of 280 px wide so long names aren't cut off. Option text wraps rather than truncating, so the full name is always readable when the dropdown is open.
+
+---
+
+## [0.6.2] — 2026-05-04
+
+### Security Hardening
+
+- **Slug path traversal defence** — `getCustomer()` now rejects any slug that doesn't match `^[a-z0-9-]+$` before performing a registry lookup, ensuring malformed slugs never reach filesystem path construction.
+- **HTTPS enforcement** — the create and update customer API routes now reject `odataUrl` values that don't start with `https://`, preventing accidental plaintext credential transmission.
+- **Deployment warning in README** — added an explicit warning that this tool is localhost-only and should not be run on shared machines or behind a proxy without adding authentication.
+- **Reports SQL safety comment** — annotated the report preview and export routes to clarify that safety of interpolated table/column names depends entirely on the ALLOWED whitelist, and that all new keys must be `[a-z0-9_]` only.
+
+---
+
 ## [0.6.1] — 2026-05-04
 
 ### Bug Fixes & Improvements

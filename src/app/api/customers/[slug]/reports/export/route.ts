@@ -81,6 +81,8 @@ export async function GET(
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const selectCols = safeColumns.map((c) => `"${c}"`).join(', ')
+  // entity, tsCol, and selectCols are safe only because they are derived entirely from
+  // the ALLOWED whitelist — never from raw user input. Keep all ALLOWED keys to [a-z0-9_].
 
   const conn = await getDb(slug)
   const rows = await dbQuery<Record<string, unknown>>(
