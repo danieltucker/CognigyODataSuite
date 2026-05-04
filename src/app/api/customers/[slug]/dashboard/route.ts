@@ -20,6 +20,13 @@ export interface DashboardData {
     topGoals: { name: string; count: number }[]
     goalEventsByDay: { date: string; events: number }[]
   }
+  topFlows: { flowName: string; count: number }[]
+  llmErrors: { errorTurns: number; totalTurns: number }
+  agentEvaluation: {
+    totalRuns: number
+    overallPassRate: number
+    criteria: { name: string; passed: number; total: number; passRate: number }[]
+  } | null
   availableChannels: string[]
   availableEndpoints: string[]
 }
@@ -39,7 +46,7 @@ export async function GET(
 
   const conn = await getDb(slug)
 
-  // Analytics + goal_events filter conditions
+  // Analytics filter (timestamp + channel + endpoint)
   const analyticsConditions: string[] = []
   const analyticsBinds: unknown[] = []
   if (from) { analyticsConditions.push(`"timestamp" >= ?`); analyticsBinds.push(from) }
@@ -48,20 +55,27 @@ export async function GET(
   if (endpoint) { analyticsConditions.push(`"endpointName" = ?`); analyticsBinds.push(endpoint) }
   const analyticsWhere = analyticsConditions.length > 0 ? `WHERE ${analyticsConditions.join(' AND ')}` : ''
 
-  // Date-only conditions (no channel/endpoint) for tables that don't have those fields
+  // Date-only filter (conversations, goal_events, live_agent_escalations)
   const dateConditions: string[] = []
   const dateBinds: unknown[] = []
   if (from) { dateConditions.push(`"timestamp" >= ?`); dateBinds.push(from) }
   if (to) { dateConditions.push(`"timestamp" <= ?`); dateBinds.push(to + 'T23:59:59.999Z') }
   const dateWhere = dateConditions.length > 0 ? `WHERE ${dateConditions.join(' AND ')}` : ''
 
-  // Sessions filter (uses startedAt, endpointName)
+  // Sessions filter (startedAt + endpointName)
   const sessionConditions: string[] = []
   const sessionBinds: unknown[] = []
   if (from) { sessionConditions.push(`"startedAt" >= ?`); sessionBinds.push(from) }
   if (to) { sessionConditions.push(`"startedAt" <= ?`); sessionBinds.push(to + 'T23:59:59.999Z') }
   if (endpoint) { sessionConditions.push(`"endpointName" = ?`); sessionBinds.push(endpoint) }
   const sessionsWhere = sessionConditions.length > 0 ? `WHERE ${sessionConditions.join(' AND ')}` : ''
+
+  // Executed steps filter (timestamp + endpointName)
+  const execStepsConditions: string[] = []
+  const execStepsBinds: unknown[] = []
+  if (from) { execStepsConditions.push(`"timestamp" >= ?`); execStepsBinds.push(from) }
+  if (to) { execStepsConditions.push(`"timestamp" <= ?`); execStepsBinds.push(to + 'T23:59:59.999Z') }
+  if (endpoint) { execStepsConditions.push(`"endpointName" = ?`); execStepsBinds.push(endpoint) }
 
   const [
     sessionVolume,
@@ -78,6 +92,9 @@ export async function GET(
     goalEventsTotal,
     topGoalsRows,
     goalEventsByDayRows,
+    topFlowsRows,
+    llmErrorRows,
+    simulatorRows,
   ] = await Promise.all([
     dbQuery<{ date: string; sessions: number }>(
       conn,
@@ -147,13 +164,11 @@ export async function GET(
       conn,
       `SELECT DISTINCT endpointName as endpoint FROM analytics WHERE endpointName IS NOT NULL AND endpointName != '' ORDER BY 1`
     ),
-    // Goal events total
     dbQuery<{ total: number }>(
       conn,
       `SELECT COUNT(*) as total FROM goal_events ${dateWhere}`,
       dateBinds
     ),
-    // Top goals by event count (join with goals for human-readable name)
     dbQuery<{ name: string; count: number }>(
       conn,
       `SELECT COALESCE(g.name, sub.goalId) as name, sub.cnt as count
@@ -165,14 +180,75 @@ export async function GET(
        ORDER BY sub.cnt DESC`,
       dateBinds
     ),
-    // Goal events by day
     dbQuery<{ date: string; events: number }>(
       conn,
       `SELECT strftime(timestamp, '%Y-%m-%d') as date, COUNT(*) as events
        FROM goal_events ${dateWhere} GROUP BY 1 ORDER BY 1`,
       dateBinds
     ),
+    // Top flows from executed_steps
+    dbQuery<{ flowName: string; count: number }>(
+      conn,
+      `SELECT flowName, COUNT(*) as count FROM executed_steps
+       WHERE flowName IS NOT NULL AND flowName != ''
+       ${execStepsConditions.length > 0 ? 'AND ' + execStepsConditions.join(' AND ') : ''}
+       GROUP BY flowName ORDER BY count DESC LIMIT 10`,
+      execStepsBinds
+    ),
+    // LLM error count from conversations debug logs
+    dbQuery<{ totalTurns: number; errorTurns: number }>(
+      conn,
+      `SELECT
+         COUNT(*) as totalTurns,
+         SUM(CASE WHEN inputData LIKE '%Bad Request Error%' OR inputData LIKE '%LLM_PROMPT__ERROR%' THEN 1 ELSE 0 END) as errorTurns
+       FROM conversations ${dateWhere}`,
+      dateBinds
+    ),
+    // Simulator/agent evaluation rows — parsed in JS below
+    dbQuery<{ inputData: string }>(
+      conn,
+      `SELECT inputData FROM analytics
+       WHERE inputData LIKE '%Simulator Metrics%'
+       ${analyticsConditions.length > 0 ? 'AND ' + analyticsConditions.join(' AND ') : ''}`,
+      analyticsBinds
+    ),
   ])
+
+  // Parse simulator metrics from analytics inputData
+  const criteriaMap = new Map<string, { achieved: number; total: number }>()
+  for (const row of simulatorRows) {
+    if (!row.inputData) continue
+    try {
+      const data = JSON.parse(row.inputData) as {
+        _cognigy?: { _debugLogs?: Array<{ header: string; message?: { results?: Array<{ achieved: boolean; criterion?: { params?: { name?: string } } }> } }> }
+      }
+      for (const log of data._cognigy?._debugLogs ?? []) {
+        if (log.header !== 'Simulator Metrics') continue
+        for (const result of log.message?.results ?? []) {
+          const name = result.criterion?.params?.name?.trim()
+          if (!name) continue
+          const entry = criteriaMap.get(name) ?? { achieved: 0, total: 0 }
+          entry.total++
+          if (result.achieved) entry.achieved++
+          criteriaMap.set(name, entry)
+        }
+      }
+    } catch {
+      // malformed inputData — skip
+    }
+  }
+
+  const criteria = Array.from(criteriaMap.entries())
+    .map(([name, stats]) => ({
+      name,
+      passed: stats.achieved,
+      total: stats.total,
+      passRate: stats.total > 0 ? Math.round((stats.achieved / stats.total) * 100) : 0,
+    }))
+    .sort((a, b) => b.total - a.total)
+
+  const totalCriteriaChecks = criteria.reduce((s, c) => s + c.total, 0)
+  const totalPassed = criteria.reduce((s, c) => s + c.passed, 0)
 
   const result: DashboardData = {
     sessionVolume: sessionVolume.map((r) => ({ date: r.date, sessions: Number(r.sessions) })),
@@ -195,6 +271,20 @@ export async function GET(
       topGoals: topGoalsRows.map((r) => ({ name: r.name, count: Number(r.count) })),
       goalEventsByDay: goalEventsByDayRows.map((r) => ({ date: r.date, events: Number(r.events) })),
     },
+    topFlows: topFlowsRows.map((r) => ({ flowName: r.flowName, count: Number(r.count) })),
+    llmErrors: {
+      errorTurns: Number(llmErrorRows[0]?.errorTurns ?? 0),
+      totalTurns: Number(llmErrorRows[0]?.totalTurns ?? 0),
+    },
+    agentEvaluation: simulatorRows.length > 0
+      ? {
+          totalRuns: simulatorRows.length,
+          overallPassRate: totalCriteriaChecks > 0
+            ? Math.round((totalPassed / totalCriteriaChecks) * 100)
+            : 0,
+          criteria,
+        }
+      : null,
     availableChannels: availableChannelRows.map((r) => r.channel),
     availableEndpoints: availableEndpointRows.map((r) => r.endpoint),
   }

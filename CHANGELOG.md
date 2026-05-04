@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0] — 2026-05-04
+
+### New Features
+
+- **Agent Evaluation section** — dashboard surfaces simulator test criteria (pass/fail results) embedded in `analytics.inputData`. Shows overall pass rate KPI, test run count, criteria count, and a per-criterion progress bar breakdown. Colour-coded by pass rate (green ≥90%, amber ≥75%, red <75%). Only visible when simulator run data exists.
+- **Top Flows chart** — horizontal bar chart showing the most-executed flows from `executed_steps`, filtered by date and endpoint. Only visible when executed steps data exists.
+- **LLM error alert banner** — detects LLM provider errors (Bad Request, prompt errors) in `conversations.inputData` debug logs and surfaces a warning banner with error count and percentage of conversation turns affected. Only shown when errors exist.
+- **Avg conversations per session** — "Conversations" KPI card now shows conversations-per-session as a subtitle (e.g. "3.1 per session").
+
+### Improvements
+
+- Rename "Records" → "Sync Status" in sidebar sub-nav.
+- Bump version to 0.3.0.
+
+---
+
 ## [0.2.0] — 2026-05-01
 
 ### New Features

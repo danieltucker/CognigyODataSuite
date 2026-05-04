@@ -159,7 +159,7 @@ export function Sidebar() {
                       }`}
                     >
                       <Table2 className="h-3 w-3" />
-                      Records
+                      Sync Status
                     </Link>
                   </div>
                 )}
@@ -187,7 +187,7 @@ export function Sidebar() {
             rel="noopener noreferrer"
             className="text-center text-[10px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors pb-1"
           >
-            v0.2.0
+            v0.3.0
           </a>
         </div>
       </aside>
