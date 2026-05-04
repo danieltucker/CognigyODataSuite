@@ -12,7 +12,7 @@ import { EditCustomerSheet } from '@/components/customers/edit-customer-sheet'
 import { customerColor, formatRelativeTime } from '@/lib/utils'
 import {
   Plus, Database, LayoutDashboard, Table2, Settings,
-  Sun, Moon, Monitor, Menu,
+  Sun, Moon, Monitor, Menu, MessageSquareText,
 } from 'lucide-react'
 import type { CustomerRecord } from '@/lib/customers'
 
@@ -86,6 +86,7 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
           const isEntities =
             pathname.startsWith(`/customers/${c.slug}/entities`) ||
             pathname.startsWith(`/customers/${c.slug}/data`)
+          const isTranscripts = pathname.startsWith(`/customers/${c.slug}/transcripts`)
           const lastSync = c.lastSyncedAt
             ? `Synced ${formatRelativeTime(c.lastSyncedAt).toLowerCase()}`
             : 'Never synced'
@@ -139,6 +140,16 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
                     <Table2 className="h-3 w-3" />
                     Sync Status
                   </Link>
+                  <Link
+                    href={`/customers/${c.slug}/transcripts`}
+                    onClick={onNavigate}
+                    className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-accent/60 hover:text-accent-foreground ${
+                      isTranscripts ? 'bg-accent/50 text-accent-foreground font-medium' : 'text-muted-foreground'
+                    }`}
+                  >
+                    <MessageSquareText className="h-3 w-3" />
+                    Transcripts
+                  </Link>
                 </div>
               )}
             </div>
@@ -165,7 +176,7 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
           rel="noopener noreferrer"
           className="text-center text-[10px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors pb-1"
         >
-          v0.3.0
+          v0.4.0
         </a>
       </div>
     </div>

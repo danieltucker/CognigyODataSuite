@@ -10,7 +10,8 @@ Cognigy Insights has gaps in filtering, custom search, and data export. This too
 
 - **Import dashboard** — per-entity sync status, manual pull, and scheduled auto-sync
 - **Data Explorer** — searchable, filterable, sortable tables for all 10 OData entities with CSV and Excel export
-- **Analytics Dashboard** — session volume, top intents, channel distribution, execution time trends, intent score distribution, escalation rate, and goals — all filterable by date range, channel, and endpoint
+- **Analytics Dashboard** — session volume, top intents, channel distribution, execution time trends, NLU confidence, escalation rate, goals, top flows, LLM error detection, and agent evaluation — all filterable by date range, channel, and endpoint
+- **Transcript Explorer** — browse and search session transcripts with styled chat bubbles, session metadata, and full user history across sessions
 
 Each customer's data is fully isolated in its own `.duckdb` file. Nothing ever leaves your machine except outbound OData API calls to the configured Cognigy endpoint.
 
@@ -82,15 +83,31 @@ Navigate to any entity via **Records** in the sidebar. Features:
 
 Click **Dashboard** in the sidebar sub-nav for any customer. Shows:
 
-- KPI cards — total sessions, conversations, escalations (with rate), average intent score, total goal events
+- KPI cards — total sessions, conversations, escalations (with rate), average intent score, total goal events, and conversations-per-session average
 - Session volume by day
 - Top 10 intents
 - Channel distribution
 - Average execution time trend
 - Intent score distribution (NLU confidence histogram)
+- Top flows — most-executed flows from executed steps data (shown when data exists)
 - Goals section — top goals by event count and goal events by day (shown when goal data exists)
+- LLM error banner — warns when LLM provider errors are detected in conversation logs
+- Agent Evaluation — surfaces simulator test pass/fail results with per-criterion breakdown (shown when simulator run data exists)
 
 All charts re-query the local database when you change the date range, channel, or endpoint filter.
+
+## Transcripts
+
+Click **Transcripts** in the sidebar sub-nav to browse session transcripts for any customer. Features:
+
+- Paginated session list showing session ID, user ID, endpoint, message count, and start time
+- Escalated sessions highlighted with an orange icon
+- Search by session ID or user ID; filter by date range and endpoint
+- Click any session to open the full chat transcript
+  - User messages right-aligned (primary colour), bot messages left-aligned (muted), live agent messages in orange
+  - Timestamps shown at 5-minute gaps; copy-to-clipboard on hover
+  - Session details panel: metadata, step count, escalations, rating and comment
+  - User history panel: links to other sessions from the same user
 
 ## Tech stack
 
@@ -115,6 +132,7 @@ src/
     customers/              Entity cards, add/edit customer sheets
     dashboard/              Dashboard charts and KPI cards
     data/                   Data explorer table + record detail sheet
+    transcripts/            Session list and transcript detail viewer
     layout/                 Sidebar
   db/
     client.ts               DuckDB connection manager (per-customer, cached)

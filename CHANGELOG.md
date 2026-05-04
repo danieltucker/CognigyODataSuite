@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0] — 2026-05-01
+
+### New Features
+
+- **Transcript Explorer** — new "Transcripts" section in the sidebar sub-nav for each customer. Shows a paginated session list with session ID, user ID, endpoint, message count, and relative start time. Escalated sessions are highlighted with an orange phone icon.
+- **Session transcript view** — clicking a session opens a full chat transcript with styled message bubbles: user messages right-aligned (primary colour), bot messages left-aligned (muted), and live agent handover messages in orange. Messages are grouped with timestamps shown when there is a 5-minute gap between turns.
+- **Session details panel** — alongside the transcript, a sidebar shows session metadata: session ID (with copy button), start time, endpoint, message count, step count, escalation count, snapshot name, and user rating with comment if present.
+- **User history panel** — if the session's `userId` is known, a "User History" section lists up to 20 other sessions from the same user, each linking directly to that transcript.
+- Filter and search on the transcript list: search by session ID or user ID, filter by date range and endpoint, with live debounced search.
+
+---
+
 ## [0.3.0] — 2026-05-04
 
 ### New Features
