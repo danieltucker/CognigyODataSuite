@@ -9,13 +9,14 @@ import {
   PieChart, Pie, Legend,
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { MultiSelect } from '@/components/ui/multi-select'
+import { DateRangePicker, defaultDateRange } from '@/components/ui/date-range-picker'
 import {
   RefreshCw, Users, MessageSquare, PhoneCall, Brain,
   TrendingUp, BarChart3, Cpu, Activity, Target,
-  GitBranch, AlertTriangle, CheckCircle2, FlaskConical,
+  GitBranch, AlertTriangle, CheckCircle2, FlaskConical, UserCheck,
 } from 'lucide-react'
 import type { DashboardData } from '@/app/api/customers/[slug]/dashboard/route'
 
@@ -24,6 +25,10 @@ const SCORE_COLORS = [
   '#e6483d', '#f97316', '#f59e0b', '#eab308',
   '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#3b9ef6', '#9341fb',
 ]
+
+// ---------------------------------------------------------------------------
+// Chart helpers
+// ---------------------------------------------------------------------------
 
 function useChartColors() {
   const { resolvedTheme } = useTheme()
@@ -54,15 +59,31 @@ function ChartTooltip({ active, payload, label, formatter }: {
   )
 }
 
-interface KPICardProps {
+// Custom dot matching the reference screenshot style
+function AreaDot({ cx, cy, stroke }: { cx?: number; cy?: number; stroke?: string }) {
+  if (cx === undefined || cy === undefined) return null
+  return <circle cx={cx} cy={cy} r={3.5} fill="white" stroke={stroke} strokeWidth={2} />
+}
+
+function AreaActiveDot({ cx, cy, stroke }: { cx?: number; cy?: number; stroke?: string }) {
+  if (cx === undefined || cy === undefined) return null
+  return <circle cx={cx} cy={cy} r={5} fill="white" stroke={stroke} strokeWidth={2.5} />
+}
+
+// Short date label: "28 Apr" → "28/4"
+function shortDate(d: string): string {
+  const parts = d.split('-')
+  if (parts.length < 3) return d
+  return `${parseInt(parts[2])}.${parseInt(parts[1])}.`
+}
+
+function KPICard({ title, value, subtitle, color, icon }: {
   title: string
   value: string | number | null
   subtitle?: string
   color: string
   icon: React.ReactNode
-}
-
-function KPICard({ title, value, subtitle, color, icon }: KPICardProps) {
+}) {
   return (
     <Card className="overflow-hidden">
       <div className="h-0.5" style={{ backgroundColor: color }} />
@@ -82,45 +103,51 @@ function KPICard({ title, value, subtitle, color, icon }: KPICardProps) {
   )
 }
 
-interface Props {
-  slug: string
-  displayName: string
-}
-
 function pct(a: number, b: number): string {
   if (b === 0) return '0%'
   return ((a / b) * 100).toFixed(1) + '%'
 }
 
-// Colour for a pass-rate percentage
 function passRateColor(rate: number): string {
   if (rate >= 90) return '#22c55e'
   if (rate >= 75) return '#f59e0b'
   return '#e6483d'
 }
 
+// ---------------------------------------------------------------------------
+// Main dashboard
+// ---------------------------------------------------------------------------
+
+interface Props {
+  slug: string
+  displayName: string
+}
+
 export function Dashboard({ slug, displayName }: Props) {
+  const init = defaultDateRange()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [from, setFrom] = useState(init.from)
+  const [to, setTo] = useState(init.to)
   const [channel, setChannel] = useState('all')
-  const [endpoint, setEndpoint] = useState('all')
+  const [endpoints, setEndpoints] = useState<string[]>([])
+  const [snapshots, setSnapshots] = useState<string[]>([])
+  const [endpointOpen, setEndpointOpen] = useState(false)
+  const [snapshotOpen, setSnapshotOpen] = useState(false)
   const colors = useChartColors()
-
-  const today = new Date().toISOString().split('T')[0]
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const p = new URLSearchParams({
-        ...(from && { from }),
-        ...(to && { to }),
-        ...(channel !== 'all' && { channel }),
-        ...(endpoint !== 'all' && { endpoint }),
-      })
+      const p = new URLSearchParams()
+      if (from) p.set('from', from)
+      if (to) p.set('to', to)
+      if (channel !== 'all') p.set('channel', channel)
+      endpoints.forEach((e) => p.append('endpoint', e))
+      snapshots.forEach((s) => p.append('snapshot', s))
+
       const res = await fetch(`/api/customers/${slug}/dashboard?${p}`)
       if (!res.ok) throw new Error(`Failed to load dashboard: ${res.status}`)
       setData(await res.json())
@@ -129,7 +156,7 @@ export function Dashboard({ slug, displayName }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [slug, from, to, channel, endpoint])
+  }, [slug, from, to, channel, endpoints, snapshots])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -141,11 +168,21 @@ export function Dashboard({ slug, displayName }: Props) {
     ? pct(data.llmErrors.errorTurns, data.llmErrors.totalTurns)
     : null
 
+  const hasFilters = from || to || channel !== 'all' || endpoints.length > 0 || snapshots.length > 0
+
+  function clearFilters() {
+    const d = defaultDateRange()
+    setFrom(d.from)
+    setTo(d.to)
+    setChannel('all')
+    setEndpoints([])
+    setSnapshots([])
+  }
+
   return (
     <div className="flex flex-col min-h-full">
       {/* Header */}
       <div className="border-b shrink-0 bg-card/50">
-        {/* Title row */}
         <div className="flex items-center gap-3 px-6 py-4">
           <div className="flex-1 min-w-0">
             <h1 className="text-base font-semibold truncate">{displayName}</h1>
@@ -158,58 +195,56 @@ export function Dashboard({ slug, displayName }: Props) {
 
         {/* Filter row */}
         <div className="flex flex-wrap items-center gap-2 px-6 pb-3">
-          {data?.availableChannels && data.availableChannels.length > 1 && (
+          <DateRangePicker
+            from={from}
+            to={to}
+            onChange={(f, t) => { setFrom(f); setTo(t) }}
+          />
+
+          {(data?.availableChannels?.length ?? 0) > 1 && (
             <Select value={channel} onValueChange={setChannel}>
-              <SelectTrigger className="h-8 w-full xs:w-36 text-xs">
+              <SelectTrigger className="h-8 w-36 text-xs">
                 <SelectValue placeholder="All channels" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All channels</SelectItem>
-                {data.availableChannels.map((ch) => (
+                {data!.availableChannels.map((ch) => (
                   <SelectItem key={ch} value={ch}>{ch}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           )}
 
-          {data?.availableEndpoints && data.availableEndpoints.length > 1 && (
-            <Select value={endpoint} onValueChange={setEndpoint}>
-              <SelectTrigger className="h-8 w-full xs:w-44 text-xs">
-                <SelectValue placeholder="All endpoints" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All endpoints</SelectItem>
-                {data.availableEndpoints.map((ep) => (
-                  <SelectItem key={ep} value={ep}>{ep}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {(data?.availableEndpoints?.length ?? 0) > 0 && (
+            <MultiSelect
+              options={data!.availableEndpoints}
+              value={endpoints}
+              onChange={setEndpoints}
+              placeholder="All endpoints"
+              className="w-44"
+              open={endpointOpen}
+              onOpenChange={setEndpointOpen}
+            />
           )}
 
-          <div className="flex items-center gap-1.5">
-            <Input
-              type="date"
-              className="h-8 w-36 text-xs font-mono"
-              value={from}
-              max={today}
-              onChange={(e) => setFrom(e.target.value)}
+          {(data?.availableSnapshots?.length ?? 0) > 0 && (
+            <MultiSelect
+              options={data!.availableSnapshots}
+              value={snapshots}
+              onChange={setSnapshots}
+              placeholder="All snapshots"
+              className="w-44"
+              open={snapshotOpen}
+              onOpenChange={setSnapshotOpen}
             />
-            <span className="text-xs text-muted-foreground">–</span>
-            <Input
-              type="date"
-              className="h-8 w-36 text-xs font-mono"
-              value={to}
-              max={today}
-              onChange={(e) => setTo(e.target.value)}
-            />
-          </div>
+          )}
 
-          {(from || to || channel !== 'all' || endpoint !== 'all') && (
+          {hasFilters && (
             <button
               className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => { setFrom(''); setTo(''); setChannel('all'); setEndpoint('all') }}
+              onClick={clearFilters}
             >
-              Clear filters
+              Reset filters
             </button>
           )}
         </div>
@@ -221,7 +256,6 @@ export function Dashboard({ slug, displayName }: Props) {
         </div>
       )}
 
-      {/* LLM error alert banner */}
       {!loading && data && data.llmErrors.errorTurns > 0 && (
         <div className="mx-6 mt-4 flex items-center gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-600 dark:text-amber-400">
           <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -236,12 +270,7 @@ export function Dashboard({ slug, displayName }: Props) {
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
         {/* KPI row */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
-          <KPICard
-            title="Sessions"
-            value={data?.summary.totalSessions.toLocaleString() ?? null}
-            color="#9341fb"
-            icon={<Users className="h-4 w-4" />}
-          />
+          <KPICard title="Sessions" value={data?.summary.totalSessions.toLocaleString() ?? null} color="#9341fb" icon={<Users className="h-4 w-4" />} />
           <KPICard
             title="Conversations"
             value={data?.summary.totalConversations.toLocaleString() ?? null}
@@ -258,54 +287,109 @@ export function Dashboard({ slug, displayName }: Props) {
           />
           <KPICard
             title="Avg Intent Score"
-            value={
-              data?.summary.avgIntentScore != null
-                ? (data.summary.avgIntentScore * 100).toFixed(1) + '%'
-                : null
-            }
+            value={data?.summary.avgIntentScore != null ? (data.summary.avgIntentScore * 100).toFixed(1) + '%' : null}
             color="#6ae1a1"
             icon={<Brain className="h-4 w-4" />}
           />
-          <KPICard
-            title="Goal Events"
-            value={data?.summary.totalGoalEvents.toLocaleString() ?? null}
-            color="#f5c842"
-            icon={<Target className="h-4 w-4" />}
-          />
+          <KPICard title="Goal Events" value={data?.summary.totalGoalEvents.toLocaleString() ?? null} color="#f5c842" icon={<Target className="h-4 w-4" />} />
         </div>
 
-        {/* Session volume */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-primary" />
-              Session Volume by Day
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
-                <RefreshCw className="h-4 w-4 animate-spin mr-2" /> Loading…
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={192}>
-                <BarChart data={data?.sessionVolume ?? []} barSize={14}>
-                  <defs>
-                    <linearGradient id="purpleGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#9341fb" stopOpacity={0.9} />
-                      <stop offset="100%" stopColor="#9341fb" stopOpacity={0.4} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid vertical={false} stroke={colors.grid} strokeDasharray="3 3" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} width={40} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: colors.grid }} />
-                  <Bar dataKey="sessions" fill="url(#purpleGrad)" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+        {/* Session volume + Unique users — side by side, same area chart style */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <Card>
+            <CardHeader className="pb-1 pt-4 px-5">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-[#9341fb]" />
+                Sessions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-2 pb-3">
+              {loading ? (
+                <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" /> Loading…
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={192}>
+                  <AreaChart data={data?.sessionVolume ?? []} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="sessionsGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#9341fb" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#9341fb" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke={colors.grid} strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10, fill: colors.axis }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={shortDate}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} width={36} allowDecimals={false} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="sessions"
+                      stroke="#9341fb"
+                      strokeWidth={2}
+                      fill="url(#sessionsGrad)"
+                      dot={<AreaDot stroke="#9341fb" />}
+                      activeDot={<AreaActiveDot stroke="#9341fb" />}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-1 pt-4 px-5">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-[#3b9ef6]" />
+                Unique Users per Day
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-2 pb-3">
+              {loading ? (
+                <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" /> Loading…
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={192}>
+                  <AreaChart data={data?.uniqueUsersPerDay ?? []} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="usersGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b9ef6" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#3b9ef6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke={colors.grid} strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10, fill: colors.axis }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={shortDate}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} width={36} allowDecimals={false} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="uniqueUsers"
+                      stroke="#3b9ef6"
+                      strokeWidth={2}
+                      fill="url(#usersGrad)"
+                      dot={<AreaDot stroke="#3b9ef6" />}
+                      activeDot={<AreaActiveDot stroke="#3b9ef6" />}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Top intents + Channel distribution */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -395,9 +479,7 @@ export function Dashboard({ slug, displayName }: Props) {
                     <Legend
                       iconSize={8}
                       iconType="circle"
-                      formatter={(value) => (
-                        <span style={{ fontSize: 11, color: colors.axis }}>{value}</span>
-                      )}
+                      formatter={(value) => <span style={{ fontSize: 11, color: colors.axis }}>{value}</span>}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -422,7 +504,7 @@ export function Dashboard({ slug, displayName }: Props) {
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={192}>
-                  <AreaChart data={data?.avgExecutionTime ?? []}>
+                  <AreaChart data={data?.avgExecutionTime ?? []} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                     <defs>
                       <linearGradient id="tealGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#6ae1a1" stopOpacity={0.3} />
@@ -430,7 +512,7 @@ export function Dashboard({ slug, displayName }: Props) {
                       </linearGradient>
                     </defs>
                     <CartesianGrid vertical={false} stroke={colors.grid} strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} tickFormatter={shortDate} interval="preserveStartEnd" />
                     <YAxis tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} width={50} tickFormatter={(v) => `${v}ms`} />
                     <Tooltip content={<ChartTooltip formatter={(v) => `${v.toLocaleString()} ms`} />} />
                     <Area type="monotone" dataKey="avgMs" stroke="#6ae1a1" strokeWidth={2} fill="url(#tealGrad)" dot={false} />
@@ -471,7 +553,7 @@ export function Dashboard({ slug, displayName }: Props) {
           </Card>
         </div>
 
-        {/* Top Flows — shown when executed_steps data exists */}
+        {/* Top Flows */}
         {!loading && (data?.topFlows.length ?? 0) > 0 && (
           <Card>
             <CardHeader className="pb-2">
@@ -481,7 +563,7 @@ export function Dashboard({ slug, displayName }: Props) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={Math.max(160, (data!.topFlows.length * 28))}>
+              <ResponsiveContainer width="100%" height={Math.max(160, data!.topFlows.length * 28)}>
                 <BarChart data={data!.topFlows} layout="vertical" barSize={10}>
                   <defs>
                     <linearGradient id="blueGrad" x1="0" y1="0" x2="1" y2="0">
@@ -508,7 +590,7 @@ export function Dashboard({ slug, displayName }: Props) {
           </Card>
         )}
 
-        {/* Agent Evaluation — shown when simulator run data exists */}
+        {/* Agent Evaluation */}
         {!loading && data?.agentEvaluation && (
           <div className="space-y-4">
             <div className="flex items-center gap-2">
@@ -518,8 +600,6 @@ export function Dashboard({ slug, displayName }: Props) {
                 {data.agentEvaluation.totalRuns.toLocaleString()} test run{data.agentEvaluation.totalRuns !== 1 ? 's' : ''}
               </span>
             </div>
-
-            {/* Eval KPI row */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <KPICard
                 title="Overall Pass Rate"
@@ -543,8 +623,6 @@ export function Dashboard({ slug, displayName }: Props) {
                 icon={<Activity className="h-4 w-4" />}
               />
             </div>
-
-            {/* Criteria pass rate breakdown */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -558,20 +636,14 @@ export function Dashboard({ slug, displayName }: Props) {
                     <div key={c.name}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs text-foreground/80 truncate pr-4">{c.name}</span>
-                        <span
-                          className="text-xs font-semibold tabular-nums shrink-0"
-                          style={{ color: passRateColor(c.passRate) }}
-                        >
+                        <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: passRateColor(c.passRate) }}>
                           {c.passRate}% <span className="text-muted-foreground font-normal">({c.passed}/{c.total})</span>
                         </span>
                       </div>
                       <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all"
-                          style={{
-                            width: `${c.passRate}%`,
-                            backgroundColor: passRateColor(c.passRate),
-                          }}
+                          style={{ width: `${c.passRate}%`, backgroundColor: passRateColor(c.passRate) }}
                         />
                       </div>
                     </div>
@@ -582,14 +654,13 @@ export function Dashboard({ slug, displayName }: Props) {
           </div>
         )}
 
-        {/* Goals section — shown when goal event data exists */}
+        {/* Goals */}
         {!loading && (data?.summary.totalGoalEvents ?? 0) > 0 && (
           <div className="space-y-5">
             <div className="flex items-center gap-2">
               <Target className="h-4 w-4 text-[#f5c842]" />
               <h2 className="text-sm font-semibold">Goals</h2>
             </div>
-
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <Card>
                 <CardHeader className="pb-2">
@@ -634,7 +705,7 @@ export function Dashboard({ slug, displayName }: Props) {
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={192}>
-                    <AreaChart data={data!.goalsSummary.goalEventsByDay}>
+                    <AreaChart data={data!.goalsSummary.goalEventsByDay} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                       <defs>
                         <linearGradient id="goldAreaGrad" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#f5c842" stopOpacity={0.3} />
@@ -642,8 +713,8 @@ export function Dashboard({ slug, displayName }: Props) {
                         </linearGradient>
                       </defs>
                       <CartesianGrid vertical={false} stroke={colors.grid} strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} width={40} />
+                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} tickFormatter={shortDate} interval="preserveStartEnd" />
+                      <YAxis tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} width={36} />
                       <Tooltip content={<ChartTooltip />} />
                       <Area type="monotone" dataKey="events" stroke="#f5c842" strokeWidth={2} fill="url(#goldAreaGrad)" dot={false} />
                     </AreaChart>

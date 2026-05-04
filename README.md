@@ -10,8 +10,8 @@ Cognigy Insights has gaps in filtering, custom search, and data export. This too
 
 - **Import dashboard** — per-entity sync status, manual pull, and scheduled auto-sync
 - **Data Explorer** — searchable, filterable, sortable tables for all 10 OData entities with CSV and Excel export
-- **Analytics Dashboard** — session volume, top intents, channel distribution, execution time trends, NLU confidence, escalation rate, goals, top flows, LLM error detection, and agent evaluation — all filterable by date range, channel, and endpoint
-- **Transcript Explorer** — browse and search session transcripts with styled chat bubbles, session metadata, and full user history across sessions
+- **Analytics Dashboard** — session volume (area chart), unique users per day, top intents, channel distribution, execution time trends, NLU confidence, escalation rate, goals, top flows, LLM error detection, and agent evaluation — all filterable by date range, channel, endpoint, and snapshot
+- **Transcript Explorer** — browse and search session transcripts with styled chat bubbles, inline conversation events (flow changes, escalations, goals), session metadata, user profile stats, and full user history across sessions
 
 Each customer's data is fully isolated in its own `.duckdb` file. Nothing ever leaves your machine except outbound OData API calls to the configured Cognigy endpoint.
 
@@ -84,7 +84,8 @@ Navigate to any entity via **Records** in the sidebar. Features:
 Click **Dashboard** in the sidebar sub-nav for any customer. Shows:
 
 - KPI cards — total sessions, conversations, escalations (with rate), average intent score, total goal events, and conversations-per-session average
-- Session volume by day
+- Session volume by day (smooth area chart)
+- Unique users per day (smooth area chart, alongside session volume)
 - Top 10 intents
 - Channel distribution
 - Average execution time trend
@@ -94,7 +95,7 @@ Click **Dashboard** in the sidebar sub-nav for any customer. Shows:
 - LLM error banner — warns when LLM provider errors are detected in conversation logs
 - Agent Evaluation — surfaces simulator test pass/fail results with per-criterion breakdown (shown when simulator run data exists)
 
-All charts re-query the local database when you change the date range, channel, or endpoint filter.
+All charts re-query the local database when you change the date range (defaults to last 7 days), channel, endpoint, or snapshot filter. Endpoint and snapshot support multi-select.
 
 ## Transcripts
 
@@ -102,12 +103,16 @@ Click **Transcripts** in the sidebar sub-nav to browse session transcripts for a
 
 - Paginated session list showing session ID, user ID, endpoint, message count, and start time
 - Escalated sessions highlighted with an orange icon
-- Search by session ID or user ID; filter by date range and endpoint
+- Search by session ID or user ID; filter by date range (defaults to last 7 days), endpoint (multi-select), and snapshot (multi-select)
+- "Has messages" toggle to hide empty sessions by default
 - Click any session to open the full chat transcript
   - User messages right-aligned (primary colour), bot messages left-aligned (muted), live agent messages in orange
-  - Timestamps shown at 5-minute gaps; copy-to-clipboard on hover
+  - Inline conversation events: flow changes (blue), handover requests (orange), goal completions (green)
+  - Timestamps shown at 5-minute gaps; copy-to-clipboard button on every message
   - Session details panel: metadata, step count, escalations, rating and comment
+  - User profile panel: first seen, last seen, total sessions, total messages, escalation count, average rating
   - User history panel: links to other sessions from the same user
+- Filter state is preserved in the URL — navigating into a transcript and pressing back restores your filters
 
 ## Tech stack
 

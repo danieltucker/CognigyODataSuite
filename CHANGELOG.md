@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0] — 2026-05-04
+
+### New Features
+
+- **DateRangePicker** — new shared date filter component used across the dashboard and transcript list. Provides one-click presets (Today, 7 days, 30 days, 3 months) plus manual from/to date inputs. Active preset is highlighted and the button label reflects the selected range. Defaults to the last 7 days on first load.
+- **Session volume redesign** — dashboard session volume chart converted from a bar chart to a smooth filled area chart with custom white-border data points, matching the Cognigy Insights visual style.
+- **Unique Users per Day chart** — new area chart on the dashboard showing distinct users by day, displayed alongside session volume in a two-column grid.
+- **Dashboard filter parity with Transcripts** — dashboard now supports multi-select endpoint filter, multi-select snapshot filter, and the shared `DateRangePicker`. All charts and KPIs re-query when any filter changes.
+- **Transcript list date filter** — bare date inputs in the transcript list replaced with the shared `DateRangePicker`, defaulting to last 7 days on first visit.
+
+---
+
 ## [0.4.0] — 2026-05-01
 
 ### New Features

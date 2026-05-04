@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { MultiSelect } from '@/components/ui/multi-select'
+import { DateRangePicker, defaultDateRange } from '@/components/ui/date-range-picker'
 import { formatRelativeTime } from '@/lib/utils'
 import {
   Search, MessageSquare, ChevronLeft, ChevronRight,
@@ -51,6 +52,7 @@ export function TranscriptList({ slug }: Props) {
   const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '')
   const [endpointOpen, setEndpointOpen] = useState(false)
   const [snapshotOpen, setSnapshotOpen] = useState(false)
+  const [didInit, setDidInit] = useState(false)
 
   // All other filters read directly from URL
   const search = searchParams.get('search') ?? ''
@@ -63,6 +65,19 @@ export function TranscriptList({ slug }: Props) {
 
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // On first mount, default to last 7 days if no date params in URL
+  useEffect(() => {
+    if (didInit) return
+    setDidInit(true)
+    if (!searchParams.get('from') && !searchParams.get('to')) {
+      const { from: f, to: t } = defaultDateRange()
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('from', f)
+      params.set('to', t)
+      router.replace(`${pathname}?${params}`)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync searchInput with URL on back-navigation
   useEffect(() => {
@@ -173,19 +188,10 @@ export function TranscriptList({ slug }: Props) {
 
         {/* Row 2: date + endpoint + snapshot */}
         <div className="flex gap-2 flex-wrap items-center">
-          <Input
-            type="date"
-            value={from}
-            onChange={(e) => updateParams({ from: e.target.value || null, page: null })}
-            className="h-8 text-sm w-36 shrink-0"
-            title="From date"
-          />
-          <Input
-            type="date"
-            value={to}
-            onChange={(e) => updateParams({ to: e.target.value || null, page: null })}
-            className="h-8 text-sm w-36 shrink-0"
-            title="To date"
+          <DateRangePicker
+            from={from}
+            to={to}
+            onChange={(f, t) => updateParams({ from: f || null, to: t || null, page: null })}
           />
 
           {(data?.availableEndpoints?.length ?? 0) > 0 && (
