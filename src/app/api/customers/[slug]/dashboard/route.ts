@@ -9,6 +9,7 @@ export interface DashboardData {
   channelDistribution: { channel: string; count: number }[]
   avgExecutionTime: { date: string; avgMs: number }[]
   escalationRate: { escalated: number; total: number }
+  escalationTrend: { date: string; escalations: number; sessions: number }[]
   intentScoreDistribution: { bucket: string; count: number }[]
   summary: {
     totalSessions: number
@@ -17,11 +18,15 @@ export interface DashboardData {
     avgIntentScore: number | null
     totalGoalEvents: number
   }
+  uniqueUsersTotal: number
+  avgSessionDuration: number | null
+  goalCompletionRate: { withGoal: number; total: number }
   goalsSummary: {
     topGoals: { name: string; count: number }[]
     goalEventsByDay: { date: string; events: number }[]
   }
   topFlows: { flowName: string; count: number }[]
+  topExecutedSteps: { stepLabel: string; count: number }[]
   llmErrors: { errorTurns: number; totalTurns: number }
   agentEvaluation: {
     totalRuns: number
@@ -111,6 +116,11 @@ export async function GET(
     topFlowsRows,
     llmErrorRows,
     simulatorRows,
+    uniqueUsersTotalRows,
+    avgDurationRows,
+    goalCompletionRows,
+    escalationTrendRows,
+    topExecutedStepsRows,
   ] = await Promise.all([
     dbQuery<{ date: string; sessions: number }>(
       conn,
@@ -255,6 +265,48 @@ export async function GET(
        ${aC.length ? 'AND ' + aC.join(' AND ') : ''}`,
       aB
     ),
+
+    dbQuery<{ total: number }>(
+      conn,
+      `SELECT COUNT(DISTINCT userId) as total FROM sessions
+       WHERE userId IS NOT NULL ${sC.length ? 'AND ' + sC.join(' AND ') : ''}`,
+      sB
+    ),
+
+    dbQuery<{ avgSeconds: number | null }>(
+      conn,
+      `SELECT ROUND(AVG(date_diff('second', minTs, maxTs)), 0) as avgSeconds
+       FROM (
+         SELECT sessionId, MIN(timestamp) as minTs, MAX(timestamp) as maxTs
+         FROM analytics ${aWhere}
+         GROUP BY sessionId HAVING COUNT(*) > 1
+       ) sub`,
+      aB
+    ),
+
+    dbQuery<{ withGoal: number }>(
+      conn,
+      `SELECT COUNT(DISTINCT sessionId) as withGoal FROM goal_events ${dWhere}`,
+      dB
+    ),
+
+    dbQuery<{ date: string; escalations: number; sessions: number }>(
+      conn,
+      `SELECT strftime("startedAt", '%Y-%m-%d') as date,
+              COUNT(*) as sessions,
+              SUM(CASE WHEN handoverEscalations > 0 THEN 1 ELSE 0 END) as escalations
+       FROM sessions ${sWhere} GROUP BY 1 ORDER BY 1`,
+      sB
+    ),
+
+    dbQuery<{ stepLabel: string; count: number }>(
+      conn,
+      `SELECT stepLabel, COUNT(*) as count FROM executed_steps
+       WHERE stepLabel IS NOT NULL AND stepLabel != ''
+       ${eC.length ? 'AND ' + eC.join(' AND ') : ''}
+       GROUP BY stepLabel ORDER BY count DESC LIMIT 15`,
+      eB
+    ),
   ])
 
   // Parse simulator metrics
@@ -291,6 +343,8 @@ export async function GET(
   const totalCriteriaChecks = criteria.reduce((s, c) => s + c.total, 0)
   const totalPassed = criteria.reduce((s, c) => s + c.passed, 0)
 
+  const totalSessions = Number(summarySessions[0]?.total ?? 0)
+
   const result: DashboardData = {
     sessionVolume: sessionVolume.map((r) => ({ date: r.date, sessions: Number(r.sessions) })),
     uniqueUsersPerDay: uniqueUsersPerDay.map((r) => ({ date: r.date, uniqueUsers: Number(r.uniqueUsers) })),
@@ -299,21 +353,33 @@ export async function GET(
     avgExecutionTime: avgExecutionTime.map((r) => ({ date: r.date, avgMs: Number(r.avgMs) })),
     escalationRate: {
       escalated: Number(summarySessions[0]?.escalated ?? 0),
-      total: Number(summarySessions[0]?.total ?? 0),
+      total: totalSessions,
     },
+    escalationTrend: escalationTrendRows.map((r) => ({
+      date: r.date,
+      escalations: Number(r.escalations),
+      sessions: Number(r.sessions),
+    })),
     intentScoreDistribution: intentScoreRows.map((r) => ({ bucket: r.bucket, count: Number(r.count) })),
     summary: {
-      totalSessions: Number(summarySessions[0]?.total ?? 0),
+      totalSessions,
       totalConversations: Number(summaryConversations[0]?.total ?? 0),
       totalEscalations: Number(summaryEscalations[0]?.total ?? 0),
       avgIntentScore: summaryAnalytics[0]?.avgScore ?? null,
       totalGoalEvents: Number(goalEventsTotal[0]?.total ?? 0),
+    },
+    uniqueUsersTotal: Number(uniqueUsersTotalRows[0]?.total ?? 0),
+    avgSessionDuration: avgDurationRows[0]?.avgSeconds != null ? Number(avgDurationRows[0].avgSeconds) : null,
+    goalCompletionRate: {
+      withGoal: Number(goalCompletionRows[0]?.withGoal ?? 0),
+      total: totalSessions,
     },
     goalsSummary: {
       topGoals: topGoalsRows.map((r) => ({ name: r.name, count: Number(r.count) })),
       goalEventsByDay: goalEventsByDayRows.map((r) => ({ date: r.date, events: Number(r.events) })),
     },
     topFlows: topFlowsRows.map((r) => ({ flowName: r.flowName, count: Number(r.count) })),
+    topExecutedSteps: topExecutedStepsRows.map((r) => ({ stepLabel: r.stepLabel, count: Number(r.count) })),
     llmErrors: {
       errorTurns: Number(llmErrorRows[0]?.errorTurns ?? 0),
       totalTurns: Number(llmErrorRows[0]?.totalTurns ?? 0),

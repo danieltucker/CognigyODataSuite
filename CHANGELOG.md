@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.7.0] — 2026-05-04
+
+### New Features
+
+- **Configurable dashboard** — each customer's dashboard layout is now fully customisable and persisted per customer at `data/customers/{slug}/dashboard-config.json`. Changes are saved automatically.
+- **Drag-and-drop card reordering** — in Edit mode (click the Settings icon in the dashboard header), cards can be reordered by dragging. KPI cards and chart cards each have their own sortable grid. Uses `@dnd-kit`.
+- **Add / remove cards** — in Edit mode, a remove button appears on each card (hover to reveal). Hidden cards appear in a restore panel at the bottom of each section. Click any hidden card to add it back.
+- **New KPI cards** — three new KPI cards are available alongside the existing five:
+  - **Containment Rate** — percentage of sessions handled without escalation
+  - **Unique Users** — distinct users in the filtered period
+  - **Avg Session Length** — mean session duration computed from analytics timestamps
+  - **Goal Completion Rate** — percentage of sessions that completed at least one goal (hidden by default, add via Edit mode)
+- **New chart cards** — two new charts available in the card registry:
+  - **Escalation Trend** — daily escalation rate as a line chart, showing whether escalations are rising or falling over the period
+  - **Top Executed Steps** — top step labels from the executed steps data, showing which bot nodes fire most often (hidden by default)
+- **GET/PUT dashboard config API** — new endpoints at `/api/customers/[slug]/dashboard-config` for reading and writing layout configs. All card IDs are validated against the registry; unknown IDs are silently dropped.
+
+---
+
 ## [0.6.3] — 2026-05-04
 
 ### UI Improvements

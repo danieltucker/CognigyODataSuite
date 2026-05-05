@@ -86,21 +86,32 @@ Navigate to any entity via **Records** in the sidebar. Features:
 
 ## Dashboard
 
-Click **Dashboard** in the sidebar sub-nav for any customer. Shows:
+Click **Dashboard** in the sidebar sub-nav for any customer. The dashboard is fully configurable — click **Edit** in the header to enter edit mode:
 
-- KPI cards — total sessions, conversations, escalations (with rate), average intent score, total goal events, and conversations-per-session average
-- Session volume by day (smooth area chart)
-- Unique users per day (smooth area chart, alongside session volume)
-- Top 10 intents
-- Channel distribution
-- Average execution time trend
-- Intent score distribution (NLU confidence histogram)
-- Top flows — most-executed flows from executed steps data (shown when data exists)
-- Goals section — top goals by event count and goal events by day (shown when goal data exists)
+- **Drag to reorder** — drag any card by its handle to reorder KPI cards or chart cards independently
+- **Remove cards** — hover a card in edit mode and click the × button to hide it
+- **Restore cards** — hidden cards appear in a restore panel at the bottom of each section; click to add back
+- **Layout is saved per customer** — positions and visibility persist in `data/customers/{slug}/dashboard-config.json`
+
+**KPI cards** (9 available, 8 shown by default):
+- Sessions, Conversations (with per-session average), Escalations (with rate), Avg Intent Score, Goal Events
+- **Containment Rate** — sessions handled without escalation
+- **Unique Users** — distinct users in the period
+- **Avg Session Length** — mean session duration
+- *Goal Completion Rate* — sessions with at least one goal completion (hidden by default)
+
+**Chart cards** (12 available, 10 shown by default):
+- Session volume by day, Unique users per day, Top 10 intents, Channel distribution
+- Average execution time trend, NLU confidence distribution (histogram)
+- **Escalation Trend** — daily escalation rate as a line chart
+- Top flows by execution count, Top goals by event count, Goal events by day
+- Agent Evaluation — simulator test pass/fail results with per-criterion breakdown
+- *Top Executed Steps* — most-executed step labels (hidden by default)
+
+**Persistent banners:**
 - LLM error banner — warns when LLM provider errors are detected in conversation logs
-- Agent Evaluation — surfaces simulator test pass/fail results with per-criterion breakdown (shown when simulator run data exists)
 
-All charts re-query the local database when you change the date range (defaults to last 7 days), channel, endpoint, or snapshot filter. Endpoint and snapshot support multi-select.
+All cards re-query the local database when you change the date range (defaults to last 7 days), channel, endpoint, or snapshot filter. Endpoint and snapshot support multi-select.
 
 ![Agent Evaluation — per-criterion pass rates](<images/Simulator Runs.png>)
 
