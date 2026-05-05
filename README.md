@@ -4,6 +4,8 @@
 
 A local analytics tool for importing, exploring, and visualising data from Cognigy.AI OData feeds. Runs entirely on your machine — no cloud, no external services, no telemetry.
 
+![Analytics Dashboard](<images/Main Screen.png>)
+
 ## What it does
 
 Cognigy Insights has gaps in filtering, custom search, and data export. This tool pulls raw OData feeds from one or more Cognigy tenants into local DuckDB databases and gives you:
@@ -100,6 +102,8 @@ Click **Dashboard** in the sidebar sub-nav for any customer. Shows:
 
 All charts re-query the local database when you change the date range (defaults to last 7 days), channel, endpoint, or snapshot filter. Endpoint and snapshot support multi-select.
 
+![Agent Evaluation — per-criterion pass rates](<images/Simulator Runs.png>)
+
 ## Reports
 
 Click **Reports** in the sidebar sub-nav to open the report builder for any customer.
@@ -111,6 +115,8 @@ Click **Reports** in the sidebar sub-nav to open the report builder for any cust
 - **Export XLS / CSV** — exports the full filtered dataset (up to 50,000 rows) for the active window
 - **Copy Email Summary** — copies a formatted HTML table to clipboard for quick pasting into emails
 
+![Reports — column picker and time window navigator](images/Reports.png)
+
 ## Transcripts
 
 Click **Transcripts** in the sidebar sub-nav to browse session transcripts for any customer. Features:
@@ -118,7 +124,7 @@ Click **Transcripts** in the sidebar sub-nav to browse session transcripts for a
 - Paginated session list showing session ID, user ID, endpoint, message count, and start time
 - Escalated sessions highlighted with an orange icon
 - Search by session ID or user ID; filter by date range (defaults to last 7 days), endpoint (multi-select), and snapshot (multi-select)
-- "Has messages" toggle to hide empty sessions by default
+- "With messages" toggle to hide empty sessions by default
 - Click any session to open the full chat transcript
   - User messages right-aligned (primary colour), bot messages left-aligned (muted), live agent messages in orange
   - Inline conversation events: flow changes (blue), handover requests (orange), goal completions (green)
@@ -126,7 +132,12 @@ Click **Transcripts** in the sidebar sub-nav to browse session transcripts for a
   - Session details panel: metadata, step count, escalations, rating and comment
   - User profile panel: first seen, last seen, total sessions, total messages, escalation count, average rating
   - User history panel: links to other sessions from the same user
+  - On mobile: tab bar switches between Conversation and Details views
 - Filter state is preserved in the URL — navigating into a transcript and pressing back restores your filters
+
+![Transcript list](images/Transcripts.png)
+
+![Transcript detail](images/Transcript.png)
 
 ## Tech stack
 
