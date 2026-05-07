@@ -13,6 +13,7 @@ Cognigy Insights has gaps in filtering, custom search, and data export. This too
 - **Import dashboard** — per-entity sync status, manual pull, and scheduled auto-sync
 - **Data Explorer** — searchable, filterable, sortable tables for all 10 OData entities with CSV and Excel export
 - **Analytics Dashboard** — session volume (area chart), unique users per day, top intents, channel distribution, execution time trends, NLU confidence, escalation rate, goals, top flows, LLM error detection, and agent evaluation — all filterable by date range, channel, endpoint, and snapshot
+- **Agent Evaluations** — drill-in view for simulator test results: trend chart, per-criterion table with sparklines and prior-period delta, per-run table with status pills, slide-over detail panels, failure samples linking to the relevant transcripts, and Excel/CSV export
 - **Transcript Explorer** — browse and search session transcripts with styled chat bubbles, inline conversation events (flow changes, escalations, goals), session metadata, user profile stats, and full user history across sessions
 - **Reports** — freeform report builder with repeating time windows (weekly, monthly, custom), saved report configs, in-app data preview, and XLS/CSV export
 
@@ -115,6 +116,22 @@ All cards re-query the local database when you change the date range (defaults t
 
 ![Agent Evaluation — per-criterion pass rates](<images/Simulator Runs.png>)
 
+## Agent Evaluations
+
+Click **Agent Evaluations** in the sidebar sub-nav (directly beneath Dashboard) to open the dedicated drill-in view for simulator test results. The Dashboard's existing Agent Evaluation card also has a `View details →` link in its header.
+
+This view turns the dashboard's at-a-glance summary into a workspace for investigating regressions and individual failures.
+
+- **KPIs with prior-period delta** — Overall Pass Rate, Test Runs, and Criteria Checked. The pass-rate KPI shows `vs. prior period` change in percentage points (the prior window is the same length immediately before the selected range).
+- **Pass-rate trend chart** — daily pass rate across the filter window with a dashed reference line at the overall rate.
+- **Recent failure samples** — top 10 most recent runs with at least one failed criterion. Each line shows the failing criterion names and a one-click jump to the transcript.
+- **Criteria table** — every criterion in the period with passed/failed counts, pass-rate bar, sparkline, and Δ vs prior period. Click any row to open a slide-over panel with that criterion's per-day trend chart and every run that evaluated it (pass/fail + transcript link).
+- **Runs table** — every simulator run in the window, sortable by time / pass rate / failed count / snapshot, paginated 50 at a time. A status pill (`pass` / `mixed` / `fail`) makes scanning fast. Click any row to open a slide-over with the full per-criterion result list and a link to the transcript.
+- **Filters** — same date range, channel, endpoint, and snapshot controls as the main Dashboard.
+- **Exports** — Excel and CSV downloads for both the runs and the criteria summary, plus a `Print / Save as PDF` action that uses the browser's print pipeline.
+
+![Agent Evaluations — drill-in view with trend, criteria, and runs](<images/agent evaluations.png>)
+
 ## Reports
 
 Click **Reports** in the sidebar sub-nav to open the report builder for any customer.
@@ -173,6 +190,7 @@ src/
     customers/              Entity cards, add/edit customer sheets
     dashboard/              Dashboard charts and KPI cards
     data/                   Data explorer table + record detail sheet
+    agent-evaluations/      Simulator-test drill-in view + detail sheets
     transcripts/            Session list and transcript detail viewer
     layout/                 Sidebar
   db/
@@ -185,6 +203,7 @@ src/
     scheduler.ts            node-cron job management
     entity-columns.ts       Column definitions + default visibility per entity
     format-cell.ts          Cell value formatting (timestamps, JSON, booleans)
+    simulator-metrics.ts    Shared parser for Cognigy "Simulator Metrics" debug logs
 data/                       ← gitignored — never committed
   customers.json            Customer registry (includes API keys)
   customers/{slug}/

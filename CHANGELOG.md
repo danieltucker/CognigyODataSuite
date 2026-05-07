@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.8.0] — 2026-05-07
+
+### New Features
+
+- **Agent Evaluations page** — new top-level view at `/customers/[slug]/agent-evaluations`, accessible from the sidebar directly beneath Dashboard. Lets analysts dig into every simulator run rather than just see the summary card on the main dashboard.
+  - **KPIs with prior-period delta** — Overall Pass Rate, Test Runs, and Criteria Checked, with `vs. prior period` comparisons (the prior window is the same length immediately before the selected range).
+  - **Pass-rate trend chart** — daily pass rate across the filter window, with a dashed reference line at the overall rate so regressions stand out.
+  - **Recent Failure Samples** — top 10 most recent runs with at least one failed criterion, listing failed criterion names and a one-click jump to the existing transcript view.
+  - **Criteria table** — every criterion in the period with passed/failed counts, pass-rate bar, sparkline, and Δ vs prior period. Click a row to open a slide-over with the per-criterion daily trend chart and every run that evaluated it (pass/fail + transcript link).
+  - **Runs table** — every simulator run, sortable, paginated 50 at a time. Status pill (`pass` / `mixed` / `fail`) at a glance. Click a row to open a slide-over with the full per-criterion result list and a link to the transcript.
+- **Dashboard "View details" link** — the existing Agent Evaluation section on the main dashboard now has a `View details →` link in its header that navigates to the new page.
+- **Filter bar parity with Dashboard** — date range, channel, endpoints, and snapshots all behave the same way as on the main dashboard.
+- **Exports** — Excel and CSV downloads for both the runs table and the criteria summary, plus a `Print / Save as PDF` action that uses the browser's print pipeline (no extra dependency).
+- **Shared simulator-metrics parser** — extracted the Cognigy "Simulator Metrics" debug-log parser into `src/lib/simulator-metrics.ts` so the dashboard summary card and the new page use a single implementation. Adds typed helpers (`parseSimulatorRows`, `aggregateCriteria`, `overallPassRate`, `dailyTrend`) and exposes per-run detail (sessionId, timestamp, snapshot, per-criterion pass/fail) that the dashboard previously discarded.
+
+### API
+
+- `GET /api/customers/[slug]/agent-evaluations` — accepts the same filter query params as the dashboard endpoint (`from`, `to`, `channel`, `endpoint[]`, `snapshot[]`) and returns summary KPIs (with prior-period comparison), daily trend, criteria aggregates with sparklines + delta vs prior, every parsed run with per-criterion results, and the failure sample list.
+- `GET /api/customers/[slug]/agent-evaluations/export` — sheet exporter accepting `sheet=runs|criteria` and `format=csv|xlsx`, plus the same filter params. Returns a streamed file download.
+
+---
+
 ## [0.7.0] — 2026-05-04
 
 ### New Features

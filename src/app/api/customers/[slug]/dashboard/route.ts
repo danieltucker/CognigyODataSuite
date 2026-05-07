@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, dbQuery } from '@/db/client'
 import { getCustomer } from '@/lib/customers'
+import {
+  parseSimulatorRows,
+  aggregateCriteria,
+  overallPassRate,
+  type SimulatorRunRow,
+} from '@/lib/simulator-metrics'
 
 export interface DashboardData {
   sessionVolume: { date: string; sessions: number }[]
@@ -258,9 +264,10 @@ export async function GET(
       dB
     ),
 
-    dbQuery<{ inputData: string }>(
+    dbQuery<SimulatorRunRow>(
       conn,
-      `SELECT inputData FROM analytics
+      `SELECT "sessionId", "timestamp", "endpointName", "snapshotName", "inputData"
+       FROM analytics
        WHERE inputData LIKE '%Simulator Metrics%'
        ${aC.length ? 'AND ' + aC.join(' AND ') : ''}`,
       aB
@@ -309,39 +316,13 @@ export async function GET(
     ),
   ])
 
-  // Parse simulator metrics
-  const criteriaMap = new Map<string, { achieved: number; total: number }>()
-  for (const row of simulatorRows) {
-    if (!row.inputData) continue
-    try {
-      const data = JSON.parse(row.inputData) as {
-        _cognigy?: { _debugLogs?: Array<{ header: string; message?: { results?: Array<{ achieved: boolean; criterion?: { params?: { name?: string } } }> } }> }
-      }
-      for (const log of data._cognigy?._debugLogs ?? []) {
-        if (log.header !== 'Simulator Metrics') continue
-        for (const result of log.message?.results ?? []) {
-          const name = result.criterion?.params?.name?.trim()
-          if (!name) continue
-          const entry = criteriaMap.get(name) ?? { achieved: 0, total: 0 }
-          entry.total++
-          if (result.achieved) entry.achieved++
-          criteriaMap.set(name, entry)
-        }
-      }
-    } catch { /* malformed — skip */ }
-  }
-
-  const criteria = Array.from(criteriaMap.entries())
-    .map(([name, stats]) => ({
-      name,
-      passed: stats.achieved,
-      total: stats.total,
-      passRate: stats.total > 0 ? Math.round((stats.achieved / stats.total) * 100) : 0,
-    }))
-    .sort((a, b) => b.total - a.total)
-
-  const totalCriteriaChecks = criteria.reduce((s, c) => s + c.total, 0)
-  const totalPassed = criteria.reduce((s, c) => s + c.passed, 0)
+  const parsedRuns = parseSimulatorRows(simulatorRows)
+  const criteria = aggregateCriteria(parsedRuns).map((c) => ({
+    name: c.name,
+    passed: c.passed,
+    total: c.total,
+    passRate: c.passRate,
+  }))
 
   const totalSessions = Number(summarySessions[0]?.total ?? 0)
 
@@ -384,12 +365,10 @@ export async function GET(
       errorTurns: Number(llmErrorRows[0]?.errorTurns ?? 0),
       totalTurns: Number(llmErrorRows[0]?.totalTurns ?? 0),
     },
-    agentEvaluation: simulatorRows.length > 0
+    agentEvaluation: parsedRuns.length > 0
       ? {
-          totalRuns: simulatorRows.length,
-          overallPassRate: totalCriteriaChecks > 0
-            ? Math.round((totalPassed / totalCriteriaChecks) * 100)
-            : 0,
+          totalRuns: parsedRuns.length,
+          overallPassRate: overallPassRate(aggregateCriteria(parsedRuns)),
           criteria,
         }
       : null,

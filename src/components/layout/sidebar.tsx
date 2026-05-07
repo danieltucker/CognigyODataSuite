@@ -12,7 +12,7 @@ import { EditCustomerSheet } from '@/components/customers/edit-customer-sheet'
 import { customerColor, formatRelativeTime } from '@/lib/utils'
 import {
   Plus, Database, LayoutDashboard, Table2, Settings,
-  Sun, Moon, Monitor, Menu, MessageSquareText, FileSpreadsheet,
+  Sun, Moon, Monitor, Menu, MessageSquareText, FileSpreadsheet, FlaskConical,
 } from 'lucide-react'
 import type { CustomerRecord } from '@/lib/customers'
 
@@ -83,6 +83,7 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
           const isActive = pathname.startsWith(`/customers/${c.slug}`)
           const color = customerColor(c.slug, c.color)
           const isDashboard = pathname === `/customers/${c.slug}/dashboard`
+          const isAgentEvals = pathname.startsWith(`/customers/${c.slug}/agent-evaluations`)
           const isEntities =
             pathname.startsWith(`/customers/${c.slug}/entities`) ||
             pathname.startsWith(`/customers/${c.slug}/data`)
@@ -131,6 +132,16 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
                   >
                     <LayoutDashboard className="h-3 w-3" />
                     Dashboard
+                  </Link>
+                  <Link
+                    href={`/customers/${c.slug}/agent-evaluations`}
+                    onClick={onNavigate}
+                    className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-accent/60 hover:text-accent-foreground ${
+                      isAgentEvals ? 'bg-accent/50 text-accent-foreground font-medium' : 'text-muted-foreground'
+                    }`}
+                  >
+                    <FlaskConical className="h-3 w-3" />
+                    Agent Evaluations
                   </Link>
                   <Link
                     href={`/customers/${c.slug}/transcripts`}
@@ -193,7 +204,7 @@ function SidebarContent({ customers, pathname, onNavigate, onEdit, onAdd }: Side
           rel="noopener noreferrer"
           className="text-center text-[10px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors pb-1"
         >
-          v0.7.0
+          v0.8.0
         </a>
       </div>
     </div>

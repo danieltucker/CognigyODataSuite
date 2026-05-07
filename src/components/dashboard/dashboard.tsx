@@ -27,7 +27,7 @@ import {
   TrendingUp, BarChart3, Cpu, Activity, Target,
   GitBranch, AlertTriangle, CheckCircle2, FlaskConical, UserCheck,
   Settings2, GripVertical, X, Plus, Clock, Shield, Users2,
-  Footprints,
+  Footprints, ChevronRight,
 } from 'lucide-react'
 import type { DashboardData } from '@/app/api/customers/[slug]/dashboard/route'
 import { CARD_REGISTRY, DEFAULT_CONFIG, type DashboardConfig } from '@/lib/dashboard-config-shared'
@@ -233,6 +233,7 @@ function renderChartCard(
   data: DashboardData | null,
   loading: boolean,
   colors: Colors,
+  slug: string,
 ): React.ReactNode {
   switch (id) {
     case 'chart-session-volume':
@@ -585,6 +586,13 @@ function renderChartCard(
                 {data.agentEvaluation.totalRuns.toLocaleString()} test run{data.agentEvaluation.totalRuns !== 1 ? 's' : ''}
               </span>
             )}
+            <a
+              href={`/customers/${slug}/agent-evaluations`}
+              className="ml-auto text-xs text-[#9341fb] hover:underline inline-flex items-center gap-1"
+            >
+              View details
+              <ChevronRight className="h-3 w-3" />
+            </a>
           </div>
           {loading ? (
             <Card><CardContent className="p-5"><LoadingChart height={80} /></CardContent></Card>
@@ -871,7 +879,7 @@ export function Dashboard({ slug, displayName }: Props) {
                 const def = CARD_REGISTRY.find((c) => c.id === id)
                 return (
                   <SortableCardWrapper key={id} id={id} editMode={editMode} onRemove={() => removeChartCard(id)} fullWidth={def?.fullWidth}>
-                    {renderChartCard(id, data, loading, colors)}
+                    {renderChartCard(id, data, loading, colors, slug)}
                   </SortableCardWrapper>
                 )
               })}
