@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.0] — 2026-05-07
+
+### New Features
+
+- **Intents page** — new top-level view at `/customers/[slug]/intents`, accessible from the sidebar directly beneath Agent Evaluations. Turns the dashboard's Top Intents widget into a real investigation surface.
+  - **Header KPIs** — Matched Turns (with % of total), Distinct Intents, Avg Confidence (color-coded by NLU threshold), and Unmatched Turns (with % of total).
+  - **Top 5 trend chart** — stacked daily volume of the top 5 intents in the period plus an "Other" bucket for the long tail. Legend, hover tooltip with daily counts.
+  - **Intents table** — every matched intent in the period (capped at 100) with: turns, distinct sessions, avg confidence, escalation rate, goal-completion rate, avg session rating, and a daily-volume sparkline. Every column sortable.
+  - **Per-intent slide-over** — click any row for outcome correlation tiles (avg confidence, escalation rate, goal completion, avg rating with sample size), confidence quantiles (p10 / median / p90), a daily-volume line chart, top 25 sample utterances with frequency + median confidence per utterance, and the 50 most-recent sessions where the intent fired (each linking to the existing transcript view).
+  - **Blind-mode aware** — when `inputText` is masked for a customer, the utterances section degrades to an explicit notice instead of a confusing empty list.
+- **Dashboard Top Intents card** — gains a `View details →` link in its header, mirroring the Agent Evaluations card pattern.
+- **Outcome correlation queries** — the new endpoint joins `analytics → sessions → goal_events` to compute escalation, goal-completion, and rating rates per intent. Session-level outcomes are deliberately *not* time-filtered: the question answered is "for sessions whose intent X fired during the window, what was the eventual outcome?"
+- **Exports** — Excel and CSV downloads for the intents table (turns, sessions, confidence, outcome rates) and for per-intent utterances (input text, count, avg confidence). Plus a `Print / Save as PDF` action via the browser print pipeline.
+
+### API
+
+- `GET /api/customers/[slug]/intents` — accepts the same filter params as the dashboard endpoint. Returns header KPIs, trend (top 5 + Other), and the intents array (turns, sessions, confidence quantiles, outcome correlation, sparkline).
+- `GET /api/customers/[slug]/intents/detail` — `?intent=NAME&...filters`. Returns top 25 utterances and the 50 most-recent sessions for the named intent, plus a `utterancesMasked` flag for Blind Mode customers.
+- `GET /api/customers/[slug]/intents/export` — sheet exporter accepting `sheet=intents|utterances` (`intent=NAME` required for utterances) and `format=csv|xlsx`, plus the same filter params.
+
+---
+
 ## [0.8.1] — 2026-05-07
 
 ### Improvements

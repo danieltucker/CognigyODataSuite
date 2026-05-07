@@ -302,6 +302,13 @@ function renderChartCard(
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Brain className="h-4 w-4 text-primary" /> Top Intents
+              <a
+                href={`/customers/${slug}/intents`}
+                className="ml-auto text-xs font-normal text-[#9341fb] hover:underline inline-flex items-center gap-1"
+              >
+                View details
+                <ChevronRight className="h-3 w-3" />
+              </a>
             </CardTitle>
           </CardHeader>
           <CardContent>

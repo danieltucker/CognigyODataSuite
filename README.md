@@ -14,6 +14,7 @@ Cognigy Insights has gaps in filtering, custom search, and data export. This too
 - **Data Explorer** — searchable, filterable, sortable tables for all 10 OData entities with CSV and Excel export
 - **Analytics Dashboard** — session volume (area chart), unique users per day, top intents, channel distribution, execution time trends, NLU confidence, escalation rate, goals, top flows, LLM error detection, and agent evaluation — all filterable by date range, channel, endpoint, and snapshot
 - **Agent Evaluations** — drill-in view for simulator test results: trend chart, per-criterion table with sparklines and prior-period delta, per-run table with status pills, slide-over detail panels, failure samples linking to the relevant transcripts, and Excel/CSV export
+- **Intents** — drill-in view for matched intents: stacked top-5 trend, per-intent table with confidence + escalation + goal-completion + rating columns, slide-over showing outcome correlation, confidence quantiles, sample utterances, and recent sessions (linking to transcripts), plus Excel/CSV export
 - **Transcript Explorer** — browse and search session transcripts with styled chat bubbles, inline conversation events (flow changes, escalations, goals), session metadata, user profile stats, and full user history across sessions
 - **Reports** — freeform report builder with repeating time windows (weekly, monthly, custom), saved report configs, in-app data preview, and XLS/CSV export
 
@@ -132,6 +133,26 @@ This view turns the dashboard's at-a-glance summary into a workspace for investi
 
 ![Agent Evaluations — drill-in view with trend, criteria, and runs](<images/agent evaluations.png>)
 
+## Intents
+
+Click **Intents** in the sidebar sub-nav (beneath Agent Evaluations) to open the dedicated drill-in view for matched intents. The Dashboard's existing Top Intents card also has a `View details →` link in its header.
+
+This view turns the at-a-glance Top Intents bar chart into a workspace for understanding *which intents matter, how confidently the bot is matching them, and what happens to the sessions they show up in*.
+
+- **Header KPIs** — Matched Turns (with `% of total`), Distinct Intents, Avg Confidence (color-coded by NLU threshold: green ≥85%, amber 60–85%, red <60%), and Unmatched Turns.
+- **Top 5 trend chart** — stacked daily volume of the top 5 intents in the period, with the long tail rolled up as `Other`. Hover for daily counts.
+- **Intents table** — every matched intent (capped at 100) with: turns, distinct sessions, avg confidence, escalation rate, goal-completion rate, avg session rating with sample size, and a daily-volume sparkline. Every column sortable. Click a row to open the slide-over.
+- **Per-intent slide-over** opens with:
+  - **Outcome correlation tiles** — avg confidence, escalation rate (red when high), goal-completion rate (green when high), avg rating with `n=…` sample size.
+  - **Confidence quantiles** — p10 / median / p90 of `intentScore` for the intent. Helps spot intents that match *most* of the time but degrade for a tail of inputs.
+  - **Daily-volume line chart** for the intent.
+  - **Top 25 sample utterances** — exact-match grouped, ranked by frequency, with median confidence per utterance. Excellent for QA: "is this really what users mean?"
+  - **Recent sessions** — 50 most-recent sessions where the intent fired, each linking to the existing transcript view.
+- **Outcome correlation methodology** — session-level outcomes (escalation, goals, rating) are *not* time-filtered. The question answered is "for sessions whose intent X fired during the window, what was the eventual outcome?", not "what happened in the window itself."
+- **Blind Mode aware** — when input text is masked for a customer, the sample utterances section shows an explicit notice rather than a confusing empty list.
+- **Filters** — same date range, channel, endpoint, and snapshot controls as the main Dashboard.
+- **Exports** — Excel and CSV for the intents table; Excel and CSV for per-intent utterances; Print / Save as PDF for the whole page.
+
 ## Reports
 
 Click **Reports** in the sidebar sub-nav to open the report builder for any customer.
@@ -191,6 +212,7 @@ src/
     dashboard/              Dashboard charts and KPI cards
     data/                   Data explorer table + record detail sheet
     agent-evaluations/      Simulator-test drill-in view + detail sheets
+    intents/                Intents drill-in view + per-intent detail sheet
     transcripts/            Session list and transcript detail viewer
     layout/                 Sidebar
   db/
