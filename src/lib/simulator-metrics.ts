@@ -126,25 +126,45 @@ export function overallPassRate(criteria: CriterionAggregate[]): number {
   return total > 0 ? Math.round((passed / total) * 100) : 0
 }
 
+export interface DailyTrendPoint {
+  date: string
+  passRate: number
+  total: number
+  passed: number
+  runs: number
+  criteriaCount: number
+}
+
 // Daily pass-rate trend for an arbitrary set of runs. Optionally scope to a
-// single criterion name.
+// single criterion name. Includes coverage context (run count + distinct
+// criteria evaluated) so consumers can disambiguate "low pass rate" from
+// "low coverage".
 export function dailyTrend(
   runs: ParsedRun[],
   criterionName?: string,
-): { date: string; passRate: number; total: number; passed: number }[] {
-  const buckets = new Map<string, { passed: number; total: number }>()
+): DailyTrendPoint[] {
+  interface Bucket {
+    passed: number
+    total: number
+    runs: number
+    criteria: Set<string>
+  }
+  const buckets = new Map<string, Bucket>()
   for (const run of runs) {
     const date = run.timestamp.slice(0, 10)
-    const entry = buckets.get(date) ?? { passed: 0, total: 0 }
+    const entry = buckets.get(date) ?? { passed: 0, total: 0, runs: 0, criteria: new Set<string>() }
+    entry.runs++
     if (criterionName) {
       for (const r of run.results) {
         if (r.name !== criterionName) continue
         entry.total++
         if (r.achieved) entry.passed++
+        entry.criteria.add(r.name)
       }
     } else {
       entry.total += run.total
       entry.passed += run.passed
+      for (const r of run.results) entry.criteria.add(r.name)
     }
     buckets.set(date, entry)
   }
@@ -153,6 +173,8 @@ export function dailyTrend(
       date,
       passed: b.passed,
       total: b.total,
+      runs: b.runs,
+      criteriaCount: b.criteria.size,
       passRate: b.total > 0 ? Math.round((b.passed / b.total) * 100) : 0,
     }))
     .sort((a, b) => a.date.localeCompare(b.date))

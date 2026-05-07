@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.1] — 2026-05-07
+
+### Improvements
+
+- **Pass-rate trend now shows two lines** — the Agent Evaluations trend chart previously plotted only the per-day pass rate, which was misleading on days with thin coverage (e.g. a day where only one ad-hoc test ran would read 0% even when the bot's overall performance was healthy). The chart now plots:
+  - **Daily** (purple) — pass rate of whatever ran that day. Hollow dots flag days where coverage was thin (≤25% of the period's max distinct criteria/day) so partial-coverage days read as low-confidence at a glance.
+  - **Cumulative** (blue) — running pass rate from the start of the window through that day. Smooth and resilient to coverage gaps; this is the "where you currently stand" line.
+- **Trend tooltip now shows coverage** — each hover surfaces both rates plus `N criteria · M runs · passed/total` so a misleading 0% day instantly reads as "1 criterion · 3 runs · 0/3 passed" rather than as a regression.
+- **`dailyTrend()` returns coverage context** — `runs` and `criteriaCount` are now part of every trend point, which the API uses to compute the cumulative line and which any future consumer can use for similar disambiguation.
+
+---
+
 ## [0.8.0] — 2026-05-07
 
 ### New Features

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useTheme } from 'next-themes'
 import {
   ResponsiveContainer,
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Legend,
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -421,29 +421,71 @@ export function AgentEvaluations({ slug, displayName }: Props) {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-[#9341fb]" /> Pass Rate Trend
+                  <span className="text-xs font-normal text-muted-foreground">— daily volatility vs running rate to date</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {data && data.trend.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={220}>
+                  <ResponsiveContainer width="100%" height={240}>
                     <LineChart data={data.trend} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
                       <CartesianGrid vertical={false} stroke={colors.grid} strokeDasharray="3 3" />
                       <XAxis dataKey="date" tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} tickFormatter={shortDate} interval="preserveStartEnd" />
                       <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: colors.axis }} tickLine={false} axisLine={false} width={36} tickFormatter={(v) => `${v}%`} />
-                      <Tooltip
-                        contentStyle={{ fontSize: 11, borderRadius: 6 }}
-                        formatter={(v, _n, payload) => {
-                          const p = (payload as { payload?: { passed?: number; total?: number } }).payload
-                          return [`${v}%`, `${p?.passed ?? 0}/${p?.total ?? 0}`]
-                        }}
+                      <Tooltip content={<TrendTooltip />} />
+                      <Legend
+                        verticalAlign="top"
+                        align="right"
+                        height={24}
+                        iconType="plainline"
+                        wrapperStyle={{ fontSize: 11 }}
                       />
-                      <ReferenceLine y={data.summary.overallPassRate} stroke="#9341fb" strokeDasharray="3 3" strokeOpacity={0.4} />
-                      <Line type="monotone" dataKey="passRate" stroke="#9341fb" strokeWidth={2} dot={{ r: 3, fill: '#9341fb' }} activeDot={{ r: 5 }} />
+                      <ReferenceLine y={data.summary.overallPassRate} stroke="#9341fb" strokeDasharray="3 3" strokeOpacity={0.3} />
+                      <Line
+                        name="Daily"
+                        type="monotone"
+                        dataKey="passRate"
+                        stroke="#9341fb"
+                        strokeWidth={2}
+                        dot={(props: { cx?: number; cy?: number; payload?: { criteriaCount?: number } }) => {
+                          const { cx, cy, payload } = props
+                          if (cx === undefined || cy === undefined) return <g />
+                          // Mark thin-coverage days (≤25% of the period's max criteria/day)
+                          // with a hollow dot so partial-coverage days read as low-confidence.
+                          const max = Math.max(...(data?.trend ?? []).map((d) => d.criteriaCount), 1)
+                          const thin = (payload?.criteriaCount ?? 0) <= Math.max(1, Math.round(max * 0.25))
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={thin ? 3 : 3.5}
+                              fill={thin ? 'transparent' : '#9341fb'}
+                              stroke="#9341fb"
+                              strokeWidth={1.5}
+                            />
+                          )
+                        }}
+                        activeDot={{ r: 5 }}
+                      />
+                      <Line
+                        name="Cumulative"
+                        type="monotone"
+                        dataKey="cumulativePassRate"
+                        stroke="#3b9ef6"
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 4 }}
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
                   <p className="text-xs text-muted-foreground p-4">No trend data.</p>
                 )}
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Hollow dots on the daily line mark days with thin coverage
+                  (only a small subset of criteria ran). Use the cumulative
+                  line to judge overall trajectory — it isn&apos;t skewed by
+                  occasional ad-hoc test runs.
+                </p>
               </CardContent>
             </Card>
 
@@ -777,6 +819,44 @@ export function AgentEvaluations({ slug, displayName }: Props) {
           )}
         </SheetContent>
       </Sheet>
+    </div>
+  )
+}
+
+interface TrendPayloadEntry {
+  payload: {
+    date: string
+    passRate: number
+    cumulativePassRate: number
+    passed: number
+    total: number
+    runs: number
+    criteriaCount: number
+  }
+}
+
+function TrendTooltip({ active, payload, label }: {
+  active?: boolean
+  payload?: TrendPayloadEntry[]
+  label?: string
+}) {
+  if (!active || !payload?.length) return null
+  const p = payload[0].payload
+  return (
+    <div className="rounded-lg border bg-card px-3 py-2 shadow-xl text-xs space-y-1 z-50">
+      <p className="font-semibold border-b border-border pb-1 mb-1">{label}</p>
+      <p className="flex items-center gap-2">
+        <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: '#9341fb' }} />
+        Daily: <span className="font-semibold tabular-nums">{p.passRate}%</span>
+        <span className="text-muted-foreground">({p.passed}/{p.total})</span>
+      </p>
+      <p className="flex items-center gap-2">
+        <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: '#3b9ef6' }} />
+        Cumulative: <span className="font-semibold tabular-nums">{p.cumulativePassRate}%</span>
+      </p>
+      <p className="text-muted-foreground border-t pt-1 mt-1">
+        {p.criteriaCount} {p.criteriaCount === 1 ? 'criterion' : 'criteria'} · {p.runs} run{p.runs !== 1 ? 's' : ''}
+      </p>
     </div>
   )
 }

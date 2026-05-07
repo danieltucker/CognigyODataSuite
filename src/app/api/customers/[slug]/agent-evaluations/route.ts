@@ -20,7 +20,15 @@ export interface AgentEvaluationsData {
     totalChecks: number
     totalPassed: number
   }
-  trend: { date: string; passRate: number; total: number; passed: number }[]
+  trend: {
+    date: string
+    passRate: number
+    cumulativePassRate: number
+    total: number
+    passed: number
+    runs: number
+    criteriaCount: number
+  }[]
   criteria: {
     name: string
     total: number
@@ -130,7 +138,21 @@ export async function GET(
   const prevCriteriaAgg = aggregateCriteria(prevRuns)
   const prevByName = new Map(prevCriteriaAgg.map((c) => [c.name, c]))
 
-  const trend = dailyTrend(runs)
+  // Daily trend + cumulative running rate from the start of the window. The
+  // cumulative line tells "where you currently stand" — partial-coverage days
+  // (where only one or two criteria ran) only nudge it slightly, so it stays
+  // representative even when the daily line spikes.
+  const dailyPoints = dailyTrend(runs)
+  let cumPassed = 0
+  let cumTotal = 0
+  const trend = dailyPoints.map((p) => {
+    cumPassed += p.passed
+    cumTotal += p.total
+    return {
+      ...p,
+      cumulativePassRate: cumTotal > 0 ? Math.round((cumPassed / cumTotal) * 100) : 0,
+    }
+  })
   const totalChecks = criteriaAgg.reduce((s, c) => s + c.total, 0)
   const totalPassed = criteriaAgg.reduce((s, c) => s + c.passed, 0)
 
